@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // ── QUERY SETS ────────────────────────────────────────────────────────────────
@@ -42,6 +43,11 @@ func FetchRedditPosts(query string, limit int) ([]core.RedditPost, error) {
 	var all []core.RedditPost
 
 	for i, q := range queries {
+		if i > 0 {
+			// Small delay between queries to avoid rate limits
+			time.Sleep(1500 * time.Millisecond)
+		}
+
 		log.Printf("  running query %d/%d: %s", i+1, len(queries), q)
 		posts, err := fetchSingle(q, limit)
 		if err != nil {
@@ -78,7 +84,10 @@ func fetchSingle(query string, limit int) ([]core.RedditPost, error) {
 	if err != nil {
 		return nil, fmt.Errorf("building request: %w", err)
 	}
-	req.Header.Set("User-Agent", "BuildOrBail/1.0")
+	
+	// Use a realistic browser User-Agent
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -88,6 +97,7 @@ func fetchSingle(query string, limit int) ([]core.RedditPost, error) {
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
+		log.Printf("    [reddit error] status=%d body=%s", resp.StatusCode, string(body))
 		return nil, fmt.Errorf("reddit returned %d: %s", resp.StatusCode, string(body))
 	}
 
