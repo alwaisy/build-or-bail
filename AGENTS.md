@@ -33,21 +33,20 @@ Go backend that fetches Reddit posts about product frustrations, sends them to a
 │  ├─ app.html                      → Single-page frontend (~71KB vanilla HTML/JS/CSS)
 │  ├─ api.js                        → Frontend API client + IndexedDB thread index
 │  └─ mock.js                       → Mock data fallback for development
-├─ .env                             → API keys and config (gitignored)
-└─ .gitignore                       → Ignores binaries, .env, data/, my-office/, .gemini/, .factory/
+└─ .gitignore                       → Ignores binaries, .env, my-office/, .gemini/, .factory/
 ```
 
 ## Architecture Overview
 
-**Request flow:** `GET /api/ideas?q=<query>&provider=<provider>` → if empty query, runs 3 intent queries in parallel → fetches Reddit posts (top, this week) → filters 10+ upvotes AND 50+ comments, excludes meme/gaming/funny/jokes subreddits → dispatches to configured LLM provider with two-part prompt (system=rules.md, user=base.md) → LLM returns JSON array of scored ideas → ideas enriched with Reddit metadata → response JSON. Frontend then filters out already-seen/saved thread keys using browser IndexedDB before rendering.
+**Request flow:** `GET /api/ideas?q=<query>&provider=<provider>` → if empty query, runs 3 intent queries in batch → fetches Reddit posts (top, this week) → filters 10+ upvotes AND 50+ comments, excludes meme/gaming/funny/jokes subreddits → dispatches to configured LLM provider with two-part prompt (system=rules.md, user=base.md) → LLM returns JSON array of scored ideas → ideas enriched with Reddit metadata → response JSON. Frontend then filters already-seen/saved ideas using browser IndexedDB before rendering.
 
-**Persistence layer:** Turso SQLite database via REST API (`TURSO_DB_URL`, `TURSO_AUTH_TOKEN`) stores ideas when user clicks "Build". Browser IndexedDB tracks processed thread keys to avoid showing repeat ideas.
+**Persistence layer:** Turso SQLite via REST API (`TURSO_DB_URL`, `TURSO_AUTH_TOKEN`) stores saved ideas. Browser IndexedDB tracks processed thread keys to avoid showing repeat ideas. No server-side index file.
 
 **LLM providers:** `openrouter` (default), `google` (Google AI Studio), `vertex` (Google Cloud Vertex AI). All share prompt templates embedded via `//go:embed`. Provider can be overridden per-request via `?provider=` query param.
 
 **Error types:** `reddit_error` (fetch failure), `empty_result` (no posts), `llm_error` (AI processing). All return JSON with `type`, `error`, `message`.
 
-**Binary:** ~10MB, zero external deps beyond Go standard library. No database, no ORM, no caching layer beyond in-process memory and local JSON index.
+**Binary:** ~10MB, zero external deps beyond Go standard library. No server-side database or file-based caching.
 
 ## Development Patterns & Constraints
 
@@ -126,7 +125,7 @@ When `q` is empty, runs 3 queries in batch:
 - Build with `go build -o buildorbail .` from project root, NOT from `./cmd/buildorbail/`
 - Vertex AI endpoint requires `locations/global` in URL path, not region value
 - Prompts embedded at compile time via `//go:embed`; rebuild after editing `.md` files
-- Local index at `data/idea_index_db.json` is created at runtime; directory must be writable
+- IndexedDB thread deduplication runs client-side in browser; no server-side index
 - `SHOW_MOCK=true` in `.env` enables mock data fallback (useful for frontend development)
 - Default port is `8080` but `.env` sets `5897`
 - Provider query param (`?provider=google`) overrides `LLM_PROVIDER` env var per-request
@@ -142,8 +141,10 @@ When `q` is empty, runs 3 queries in batch:
 
 ## Deployment
 
-- Build: `GOOS=linux GOARCH=amd64 go build -o buildorbail .`
+- Build binary: `GOOS=linux GOARCH=amd64 go build -o buildorbail .`
+- **Docker** (recommended for VPS):
+  - `cd deploy && docker compose up -d --build`
+  - See `deploy/README.md` for full VPS deployment guide with Nginx/SSL
 - Deploy: binary + `web/` folder + `.env` to any Linux server
 - Run: `./buildorbail` (reads `.env` from `.` and `../../.` automatically)
-- No Dockerfile, docker-compose, or container config
-- Binary is self-contained (~10MB), no runtime dependencies beyond OS
+- Docker image based on Alpine Linux 3.19, ~15MB compressed

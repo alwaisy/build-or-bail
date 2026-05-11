@@ -1,0 +1,21 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: buildorbail:latest
+    container_name: buildorbail
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-5897}:8080"
+    env_file:
+      - ../.env
+    environment:
+      - PORT=8080
+      - SHOW_MOCK=false
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/config"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
