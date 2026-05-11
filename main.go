@@ -368,6 +368,14 @@ func main() {
 			path = "/app.html"
 		}
 
+		// Prevent stale frontend bundles in browsers after deploys.
+		switch {
+		case strings.HasSuffix(path, ".html"):
+			w.Header().Set("Cache-Control", "no-store")
+		case strings.HasSuffix(path, ".js"), strings.HasSuffix(path, ".css"):
+			w.Header().Set("Cache-Control", "no-cache, max-age=0, must-revalidate")
+		}
+
 		// Try root first, then web/
 		fpath := "." + path
 		if _, err := os.Stat(fpath); os.IsNotExist(err) {
