@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -84,12 +85,26 @@ func fetchSingle(query string, limit int) ([]core.RedditPost, error) {
 	if err != nil {
 		return nil, fmt.Errorf("building request: %w", err)
 	}
-	
+
 	// Use a realistic browser User-Agent
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	// Setup client with proxy if configured
+	client := &http.Client{Timeout: 30 * time.Second}
+	if proxyURLStr := os.Getenv("PROXY_URL"); proxyURLStr != "" {
+		proxyURL, err := url.Parse(proxyURLStr)
+		if err != nil {
+			log.Printf("    [proxy error] invalid PROXY_URL: %v", err)
+		} else {
+			client.Transport = &http.Transport{
+				Proxy: http.ProxyURL(proxyURL),
+			}
+			log.Printf("    [reddit] using proxy: %s", proxyURL.Host)
+		}
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetching reddit: %w", err)
 	}
@@ -122,3 +137,4 @@ func fetchSingle(query string, limit int) ([]core.RedditPost, error) {
 
 	return posts, nil
 }
+
