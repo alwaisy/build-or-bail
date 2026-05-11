@@ -56,8 +56,10 @@ const IDEA_INDEX_STORE = "idea_threads";
 
 function ideaThreadKey(idea) {
     const link = (idea?.sampleLink || "").trim();
-    if (link) return link;
-    return `${(idea?.title || "").trim()}::${(idea?.samplePost || "").trim()}`;
+    const title = (idea?.title || "").trim();
+    const post = (idea?.samplePost || "").trim();
+    // Use link+title so two ideas referencing the same thread are still distinct
+    return `${link}::${title}::${post}`;
 }
 
 function openIdeaIndexDb() {

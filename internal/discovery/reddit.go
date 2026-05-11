@@ -92,6 +92,7 @@ func fetchSingle(query string, limit int) ([]core.RedditPost, error) {
 
 	// Setup client with proxy if configured
 	client := &http.Client{Timeout: 30 * time.Second}
+	transportMode := "direct"
 	if proxyURLStr := os.Getenv("PROXY_URL"); proxyURLStr != "" {
 		proxyURL, err := url.Parse(proxyURLStr)
 		if err != nil {
@@ -100,9 +101,10 @@ func fetchSingle(query string, limit int) ([]core.RedditPost, error) {
 			client.Transport = &http.Transport{
 				Proxy: http.ProxyURL(proxyURL),
 			}
-			log.Printf("    [reddit] using proxy: %s", proxyURL.Host)
+			transportMode = fmt.Sprintf("proxy(%s)", proxyURL.Host)
 		}
 	}
+	log.Printf("    [reddit] request url=%s transport=%s", req.URL.String(), transportMode)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -137,4 +139,3 @@ func fetchSingle(query string, limit int) ([]core.RedditPost, error) {
 
 	return posts, nil
 }
-

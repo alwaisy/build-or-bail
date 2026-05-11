@@ -129,8 +129,8 @@ func InitDB() {
 		return
 	}
 
-	sql := `
-	CREATE TABLE IF NOT EXISTS buildorbail_ideas (
+	// Ideas table
+	execTurso(`CREATE TABLE IF NOT EXISTS buildorbail_ideas (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		title TEXT,
 		summary TEXT,
@@ -142,14 +142,16 @@ func InitDB() {
 		verdict TEXT,
 		sample_post TEXT,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);`
+	);`, nil)
 
-	err = execTurso(sql, nil)
-	if err != nil {
-		log.Printf("  [db error] Failed to initialize table: %v", err)
-	} else {
-		log.Println("  [db] Turso database initialized")
-	}
+	// Thread index table - unique constraint on thread URL for dedup
+	execTurso(`CREATE TABLE IF NOT EXISTS buildorbail_threads (
+		thread_url TEXT PRIMARY KEY,
+		first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+		last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
+	);`, nil)
+
+	log.Println("  [db] Turso database initialized")
 
 	// Lightweight schema migrations for previously-created tables.
 	addColumnIfMissing("buildorbail_ideas", "competitors TEXT")
@@ -354,4 +356,143 @@ func addColumnIfMissing(table, definition string) {
 		}
 		log.Printf("  [db warn] Migration skipped for %s (%s): %v", table, definition, err)
 	}
+}
+
+// ── THREAD DEDUP (BEFORE LLM) ──────────────────────────────────────────────
+
+func threadURL(p core.RedditPost) string {
+	if p.Perma != "" {
+		if strings.HasPrefix(p.Perma, "http://") || strings.HasPrefix(p.Perma, "https://") {
+			return p.Perma
+		}
+		return "https://www.reddit.com" + p.Perma
+	}
+	if p.URL != "" {
+		return p.URL
+	}
+	return "reddit:" + p.ID
+}
+
+// FilterUnindexedPosts checks Turso for already-seen thread URLs and returns only fresh posts.
+func FilterUnindexedPosts(posts []core.RedditPost) ([]core.RedditPost, int, error) {
+	// Build set of thread URLs to check
+	urls := make([]string, 0, len(posts))
+	urlMap := make(map[string]bool)
+	for _, p := range posts {
+		u := threadURL(p)
+		if !urlMap[u] {
+			urlMap[u] = true
+			urls = append(urls, u)
+		}
+	}
+
+	// Query Turso for existing URLs
+	existing, err := querySeenThreads(urls)
+	if err != nil {
+		log.Printf("  [db warn] Turso unreachable for thread dedup, processing all: %v", err)
+		return posts, 0, nil // soft-fail: process everything if Turso is down
+	}
+
+	// Filter
+	filtered := make([]core.RedditPost, 0, len(posts))
+	skipped := 0
+	for _, p := range posts {
+		if existing[threadURL(p)] {
+			skipped++
+			continue
+		}
+		filtered = append(filtered, p)
+	}
+	return filtered, skipped, nil
+}
+
+func querySeenThreads(urls []string) (map[string]bool, error) {
+	if len(urls) == 0 {
+		return map[string]bool{}, nil
+	}
+
+	dbUrl, token, err := getTursoConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	// Build placeholders: thread_url IN (?, ?, ...)
+	placeholders := make([]string, len(urls))
+	args := make([]tursoArg, len(urls))
+	for i, u := range urls {
+		placeholders[i] = "?"
+		args[i] = tursoArg{Type: "text", Value: u}
+	}
+
+	sql := fmt.Sprintf("SELECT thread_url FROM buildorbail_threads WHERE thread_url IN (%s)",
+		strings.Join(placeholders, ","))
+
+	reqBody := tursoRequest{
+		Requests: []tursoStatement{
+			{
+				Type: "execute",
+				Stmt: tursoStmt{Sql: sql, Args: args},
+			},
+			{Type: "close"},
+		},
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling turso request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", dbUrl+"/v2/pipeline", bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("building turso request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("calling turso: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var tResp tursoResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tResp); err != nil {
+		return nil, fmt.Errorf("decoding turso response: %w", err)
+	}
+
+	result := make(map[string]bool)
+	for _, r := range tResp.Results {
+		if r.Error != nil {
+			continue
+		}
+		for _, row := range r.Response.Result.Rows {
+			if len(row) > 0 {
+				key := parseTursoValue(row[0])
+				if key != "" {
+					result[key] = true
+				}
+			}
+		}
+	}
+	return result, nil
+}
+
+// IndexThreads marks a batch of Reddit posts as seen in Turso.
+func IndexThreads(posts []core.RedditPost) error {
+	if len(posts) == 0 {
+		return nil
+	}
+
+	// Build multi-row INSERT OR REPLACE
+	values := make([]string, 0, len(posts))
+	args := make([]tursoArg, 0, len(posts)*2)
+	for _, p := range posts {
+		values = append(values, "(?, CURRENT_TIMESTAMP)")
+		args = append(args, tursoArg{Type: "text", Value: threadURL(p)})
+	}
+
+	sql := fmt.Sprintf(`INSERT OR REPLACE INTO buildorbail_threads (thread_url, last_seen)
+		VALUES %s`, strings.Join(values, ", "))
+
+	return execTurso(sql, args)
 }

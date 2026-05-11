@@ -77,6 +77,17 @@ func handleIdeas(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("  got %d posts from reddit", len(posts))
 
+	// Filter previously-seen threads before LLM (dedup by Reddit thread URL)
+	freshPosts, skipped, err := db.FilterUnindexedPosts(posts)
+	if err != nil {
+		log.Printf("  [db warn] Thread indexing unavailable, proceeding with all posts: %v", err)
+	} else {
+		posts = freshPosts
+		if skipped > 0 {
+			log.Printf("  skipped %d already-indexed threads", skipped)
+		}
+	}
+
 	if len(posts) == 0 {
 		writeJSON(w, http.StatusNotFound, map[string]string{
 			"error":   "no posts found",
@@ -98,6 +109,11 @@ func handleIdeas(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ideas = core.EnrichIdeasWithRedditData(ideas, posts)
+
+	// Mark threads as seen so they won't be re-processed
+	if err := db.IndexThreads(posts); err != nil {
+		log.Printf("  [db warn] Failed to index threads: %v", err)
+	}
 
 	resp := core.IdeasResponse{
 		Ideas:     ideas,

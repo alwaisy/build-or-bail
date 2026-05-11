@@ -1734,17 +1734,15 @@
                 try {
                     const res = await fetchIdeas();
                     const pulledIdeas = res.ideas || [];
-                    const savedIdeas = await fetchSavedIdeas().catch(() => []);
-                    await markIdeasSeen(savedIdeas).catch(() => {});
-                    const savedKeys = new Set(savedIdeas.map((idea) => ideaThreadKey(idea)));
-                    const seenKeys = await getSeenThreadKeys().catch(() => new Set());
 
+                    // Filter out already-saved ideas
+                    const savedIdeas = await fetchSavedIdeas().catch(() => []);
+                    const savedKeys = new Set(savedIdeas.map((idea) => ideaThreadKey(idea)));
                     currentIdeas = pulledIdeas.filter((idea) => {
                         const key = ideaThreadKey(idea);
                         if (!key) return true;
-                        return !savedKeys.has(key) && !seenKeys.has(key);
+                        return !savedKeys.has(key);
                     });
-                    await markIdeasSeen(currentIdeas).catch(() => {});
 
                     loading.style.display = "none";
                     stopLoadingMessages();
