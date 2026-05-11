@@ -2,12 +2,49 @@
 
 let APP_CONFIG = { showMock: true, provider: "openrouter" };
 
+async function parseApiResponse(res, fallbackType = "unknown_error") {
+    const raw = await res.text();
+    let data = null;
+
+    if (raw) {
+        try {
+            data = JSON.parse(raw);
+        } catch (_) {
+            data = null;
+        }
+    }
+
+    if (!res.ok) {
+        if (data && typeof data === "object") {
+            throw {
+                type: data.type || fallbackType,
+                message: data.message || data.error || res.statusText,
+            };
+        }
+
+        const compact = (raw || "").replace(/\s+/g, " ").trim();
+        throw {
+            type: fallbackType,
+            message: compact ? compact.slice(0, 220) : "We hit a temporary server issue. Please try again.",
+        };
+    }
+
+    if (!data || typeof data !== "object") {
+        throw {
+            type: "invalid_json",
+            message: "We hit a temporary server issue. Please try again.",
+        };
+    }
+
+    return data;
+}
+
 async function fetchConfig() {
     try {
         const res = await fetch("/api/config");
-        if (res.ok) APP_CONFIG = await res.json();
+        APP_CONFIG = await parseApiResponse(res, "config_error");
     } catch (e) {
-        console.warn("Config fetch failed, using defaults:", e.message);
+        console.warn("Config fetch failed, using defaults:", e.message || e);
     }
     return APP_CONFIG;
 }
@@ -17,22 +54,12 @@ async function fetchIdeas(query) {
     if (query) params.set("q", query);
 
     const res = await fetch("/api/ideas?" + params.toString());
-    const data = await res.json();
-
-    if (!res.ok) {
-        throw {
-            type: data.type || "unknown_error",
-            message: data.message || data.error || res.statusText,
-        };
-    }
-
-    return data;
+    return parseApiResponse(res, "unknown_error");
 }
 
 async function fetchSavedIdeas() {
     const res = await fetch("/api/saved");
-    const data = await res.json();
-    if (!res.ok) throw new Error("Failed to fetch saved ideas");
+    const data = await parseApiResponse(res, "saved_fetch_error");
     return data.ideas || [];
 }
 
@@ -42,8 +69,7 @@ async function removeSavedIdea(id) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Failed to remove saved idea");
+    const data = await parseApiResponse(res, "unsave_error");
     return data;
 }
 

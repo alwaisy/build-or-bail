@@ -12,6 +12,9 @@ services:
       - ../.env
     environment:
       - PORT=5897
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/google-creds.json
+    volumes:
+      - ../google-creds.json:/app/google-creds.json:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:5897/api/config"]
       interval: 30s

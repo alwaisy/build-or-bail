@@ -1706,6 +1706,39 @@
                 clearInterval(loadingInterval);
             }
 
+            function presentErrorType(type) {
+                const map = {
+                    reddit_error: "Reddit fetch failed",
+                    llm_error: "AI processing failed",
+                    empty_result: "No matching posts found",
+                    invalid_json: "Invalid server response",
+                    config_error: "Config fetch failed",
+                    saved_fetch_error: "Saved ideas unavailable",
+                    unsave_error: "Could not remove saved idea",
+                    unknown_error: "Request failed",
+                };
+                return map[type] || (type || "Request failed");
+            }
+
+            function presentErrorMessage(type, msg) {
+                const friendlyByType = {
+                    reddit_error: "Couldn’t load Reddit posts right now. Please try again.",
+                    llm_error: "We found posts, but couldn’t generate ideas right now. Please try again.",
+                    empty_result: "No good matches this round. Try a different query.",
+                    invalid_json: "We hit a temporary server issue. Please try again.",
+                    config_error: "Couldn’t load app settings. Please refresh and try again.",
+                    saved_fetch_error: "Couldn’t load saved ideas right now.",
+                    unsave_error: "Couldn’t remove this item right now. Please try again.",
+                    unknown_error: "Something went wrong. Please try again.",
+                };
+                if (friendlyByType[type]) return friendlyByType[type];
+
+                const text = String(msg || "").replace(/\s+/g, " ").trim();
+                if (!text) return "Something went wrong. Please try again.";
+                if (/^</.test(text)) return "We hit a temporary server issue. Please try again.";
+                return text.length <= 140 ? text : "Something went wrong. Please try again.";
+            }
+
             // ── INIT ──
             async function init() {
                 const config = await fetchConfig();
@@ -1770,23 +1803,79 @@
                     btn.disabled = false;
 
                     const errType = err.type || "unknown_error";
-                    const errMsg = err.message || "Something went wrong.";
+                    const errTitle = presentErrorType(errType);
+                    const errMsg = presentErrorMessage(errType, err.message);
                     status.textContent = "Could not pull ideas";
 
-                    if (!errorDiv) {
+                    let target = errorDiv;
+                    if (!target) {
                         const div = document.createElement("div");
                         div.id = "feed-error";
                         document.getElementById("cardStack").before(div);
+                        target = div;
                     }
-                    document.getElementById("feed-error").innerHTML =
-                        '<div style="margin:0 12px 12px;background:#FFEBE9;border:0.5px solid rgba(255,59,48,0.2);border-radius:var(--r-sm);padding:14px;">' +
-                        '<div style="font-size:13px;font-weight:600;color:#C0392B;margin-bottom:6px;">' + errType + '</div>' +
-                        '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:10px;">' + errMsg + '</div>' +
-                        '<div style="display:flex;gap:8px;">' +
-                        '<button onclick="handleFetch()" style="padding:8px 16px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Try again</button>' +
-                        (APP_CONFIG.showMock ? '<button onclick="handleMock()" style="padding:8px 16px;background:var(--bg);border:1px solid var(--border-s);border-radius:8px;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">See sample</button>' : '') +
-                        '</div></div>';
-                    document.getElementById("feed-error").style.display = "block";
+                    target.replaceChildren();
+
+                    const box = document.createElement("div");
+                    box.style.margin = "0 12px 12px";
+                    box.style.background = "#FFEBE9";
+                    box.style.border = "0.5px solid rgba(255,59,48,0.2)";
+                    box.style.borderRadius = "var(--r-sm)";
+                    box.style.padding = "14px";
+
+                    const title = document.createElement("div");
+                    title.style.fontSize = "13px";
+                    title.style.fontWeight = "600";
+                    title.style.color = "#C0392B";
+                    title.style.marginBottom = "6px";
+                    title.textContent = errTitle;
+                    box.appendChild(title);
+
+                    const body = document.createElement("div");
+                    body.style.fontSize = "13px";
+                    body.style.color = "var(--text2)";
+                    body.style.lineHeight = "1.5";
+                    body.style.marginBottom = "10px";
+                    body.textContent = errMsg;
+                    box.appendChild(body);
+
+                    const actionsRow = document.createElement("div");
+                    actionsRow.style.display = "flex";
+                    actionsRow.style.gap = "8px";
+
+                    const retryBtn = document.createElement("button");
+                    retryBtn.textContent = "Try again";
+                    retryBtn.style.padding = "8px 16px";
+                    retryBtn.style.background = "var(--accent)";
+                    retryBtn.style.border = "none";
+                    retryBtn.style.borderRadius = "8px";
+                    retryBtn.style.color = "#fff";
+                    retryBtn.style.fontSize = "12px";
+                    retryBtn.style.fontWeight = "600";
+                    retryBtn.style.cursor = "pointer";
+                    retryBtn.style.fontFamily = "inherit";
+                    retryBtn.onclick = handleFetch;
+                    actionsRow.appendChild(retryBtn);
+
+                    if (APP_CONFIG.showMock) {
+                        const sampleBtn = document.createElement("button");
+                        sampleBtn.textContent = "See sample";
+                        sampleBtn.style.padding = "8px 16px";
+                        sampleBtn.style.background = "var(--bg)";
+                        sampleBtn.style.border = "1px solid var(--border-s)";
+                        sampleBtn.style.borderRadius = "8px";
+                        sampleBtn.style.color = "var(--muted)";
+                        sampleBtn.style.fontSize = "12px";
+                        sampleBtn.style.fontWeight = "600";
+                        sampleBtn.style.cursor = "pointer";
+                        sampleBtn.style.fontFamily = "inherit";
+                        sampleBtn.onclick = handleMock;
+                        actionsRow.appendChild(sampleBtn);
+                    }
+
+                    box.appendChild(actionsRow);
+                    target.appendChild(box);
+                    target.style.display = "block";
                 }
             }
 

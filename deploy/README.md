@@ -29,9 +29,20 @@ cp .env.example .env
 nano .env
 # Add your API keys:
 #   OPENROUTER_API_KEY=sk-...
-#   GOOGLE_AI_API_KEY=...
+#   GOOGLE_AI_API_KEY=...  (Google AI Studio - simpler)
 #   TURSO_DB_URL=https://...
 #   TURSO_AUTH_TOKEN=...
+```
+
+**For Vertex AI (service account):**
+```bash
+# 1. In Google Cloud Console → IAM → Service Accounts → Create
+#    Role: "Vertex AI User"
+# 2. Create JSON key → download → copy to project root
+scp google-creds.json user@vps:/home/user/buildorbail/google-creds.json
+# 3. Set in .env:
+#    GOOGLE_APPLICATION_CREDENTIALS=google-creds.json
+#    VERTEX_PROJECT_ID=your-project-id
 ```
 
 ### 3. Configure and Deploy
@@ -80,32 +91,27 @@ docker compose logs -f
 curl http://localhost:5897/api/config
 ```
 
-## Production Deployment (with reverse proxy)
+## Production Deployment (with Caddy)
 
-### Nginx config example:
+Caddy is the recommended reverse proxy. It handles automatic SSL (HTTPS) and has a simple configuration.
 
-```nginx
-server {
-    listen 80;
-    server_name yourdomain.com;
+### Caddyfile example:
 
-    location / {
-        proxy_pass http://localhost:${HOST_PORT:-5897};
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_cache_bypass $http_upgrade;
-    }
+```caddy
+buildorbail.yourdomain.com {
+    reverse_proxy localhost:5897
+    encode zstd gzip
 }
 ```
 
-### SSL with Certbot:
+### Apply configuration:
 
 ```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d yourdomain.com
+# If running Caddy as a service:
+sudo systemctl reload caddy
+
+# Or using Docker:
+# docker run -d -p 80:80 -p 443:443 -v $PWD/Caddyfile:/etc/caddy/Caddyfile caddy
 ```
 
 ## Updating

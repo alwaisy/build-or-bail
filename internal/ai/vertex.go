@@ -3,12 +3,21 @@ package ai
 import (
 	"buildorbail/internal/core"
 	"bytes"
+	"crypto"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // ── GOOGLE GENERATIVE AI ────────────────────────────────────────────────────
@@ -44,12 +53,122 @@ type googleResponse struct {
 	} `json:"error"`
 }
 
+// ServiceAccountKey matches the format of the Google Cloud JSON key file.
+type ServiceAccountKey struct {
+	Type                    string `json:"type"`
+	ProjectID               string `json:"project_id"`
+	PrivateKeyID            string `json:"private_key_id"`
+	PrivateKey              string `json:"private_key"`
+	ClientEmail             string `json:"client_email"`
+	ClientID                string `json:"client_id"`
+	AuthURI                 string `json:"auth_uri"`
+	TokenURI                string `json:"token_uri"`
+	AuthProviderX509CertURL string `json:"auth_provider_x509_cert_url"`
+	ClientX509CertURL       string `json:"client_x509_cert_url"`
+}
+
 func getGCloudToken() (string, error) {
+	// 1. Try Service Account JSON (Production/Docker way)
+	keyPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	if keyPath == "" {
+		keyPath = "google-creds.json" // default name
+	}
+
+	if _, err := os.Stat(keyPath); err == nil {
+		token, err := getServiceAccountToken(keyPath)
+		if err == nil {
+			return token, nil
+		}
+		log.Printf("    [auth] failed to get token from JSON: %v", err)
+	}
+
+	// 2. Fallback to gcloud CLI (Local development way)
 	out, err := exec.Command("gcloud", "auth", "print-access-token").Output()
 	if err != nil {
-		return "", fmt.Errorf("failed to get gcloud token: %w. Make sure 'gcloud auth login' was run.", err)
+		return "", fmt.Errorf("failed to get gcloud token: %w. Make sure 'gcloud auth login' was run or google-creds.json exists.", err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// getServiceAccountToken performs a manual JWT exchange for an access token (No SDKs).
+func getServiceAccountToken(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+
+	var key ServiceAccountKey
+	if err := json.Unmarshal(data, &key); err != nil {
+		return "", err
+	}
+
+	now := time.Now().Unix()
+	claims := map[string]interface{}{
+		"iss":   key.ClientEmail,
+		"scope": "https://www.googleapis.com/auth/cloud-platform",
+		"aud":   key.TokenURI,
+		"exp":   now + 3600,
+		"iat":   now,
+	}
+
+	header := "{\"alg\":\"RS256\",\"typ\":\"JWT\"}"
+	headerB64 := base64.RawURLEncoding.EncodeToString([]byte(header))
+
+	claimsJSON, _ := json.Marshal(claims)
+	claimsB64 := base64.RawURLEncoding.EncodeToString(claimsJSON)
+
+	payload := headerB64 + "." + claimsB64
+
+	block, _ := pem.Decode([]byte(key.PrivateKey))
+	if block == nil {
+		return "", fmt.Errorf("failed to decode PEM block in private key")
+	}
+
+	parsedKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse private key: %w", err)
+	}
+
+	rsaKey, ok := parsedKey.(*rsa.PrivateKey)
+	if !ok {
+		return "", fmt.Errorf("not an RSA private key")
+	}
+
+	h := sha256.New()
+	h.Write([]byte(payload))
+	digest := h.Sum(nil)
+
+	sig, err := rsa.SignPKCS1v15(nil, rsaKey, crypto.SHA256, digest)
+	if err != nil {
+		return "", fmt.Errorf("failed to sign JWT: %w", err)
+	}
+
+	sigB64 := base64.RawURLEncoding.EncodeToString(sig)
+	signedJWT := payload + "." + sigB64
+
+	// Exchange JWT for Access Token
+	resp, err := http.PostForm(key.TokenURI, map[string][]string{
+		"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
+		"assertion":  {signedJWT},
+	})
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var res struct {
+		AccessToken string `json:"access_token"`
+		Error       string `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return "", err
+	}
+
+	if res.Error != "" {
+		return "", fmt.Errorf("oauth2 error: %s", res.Error)
+	}
+
+	return res.AccessToken, nil
 }
 
 func callGoogle(apiKey, model string, posts []core.RedditPost) ([]core.Idea, error) {

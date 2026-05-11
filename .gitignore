@@ -5,6 +5,7 @@ buildorbail
 
 # Environment variables (contains API keys)
 .env
+google-creds.json
 
 # Research notes (not code)
 my-office/

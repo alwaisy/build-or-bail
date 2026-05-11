@@ -63,13 +63,13 @@ docker compose up -d --build
 
 Caddy reverse proxy:
 ```caddy
-buildorbail.alwaisy.dev {
+buildorbail.yourdomain.com {
     reverse_proxy localhost:5897
     encode zstd gzip
 }
 ```
 
-See `deploy/README.md` for full deployment guide with Nginx, SSL, and troubleshooting.
+See `deploy/README.md` for the full deployment guide with Caddy and SSL.
 
 ## Project Structure
 

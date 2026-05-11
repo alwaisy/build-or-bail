@@ -20,6 +20,7 @@ WORKDIR /app
 COPY --from=builder /app/buildorbail .
 COPY --from=builder /app/web ./web
 COPY --from=builder /app/internal/ai/prompts ./internal/ai/prompts
+COPY --from=builder /app/google-creds.json ./google-creds.json
 
 # Create non-root user
 RUN adduser -D -g '' appuser
