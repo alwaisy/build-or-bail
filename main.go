@@ -74,26 +74,11 @@ func handleIdeas(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("  got %d posts from reddit", len(posts))
 
-	freshPosts, skippedIndexed, err := db.FilterUnindexedPosts(posts)
-	if err != nil {
-		log.Printf("  [index db error] %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error":   "local index db unavailable",
-			"type":    "index_db_error",
-			"message": "Could not read local index database.",
-		})
-		return
-	}
-	if skippedIndexed > 0 {
-		log.Printf("  skipped %d already-indexed threads", skippedIndexed)
-	}
-
-	posts = freshPosts
 	if len(posts) == 0 {
 		writeJSON(w, http.StatusNotFound, map[string]string{
-			"error":   "no fresh posts found",
+			"error":   "no posts found",
 			"type":    "empty_result",
-			"message": "No fresh posts found. Try a different search term.",
+			"message": "No posts found for this query. Try a different search term.",
 		})
 		return
 	}
@@ -110,9 +95,6 @@ func handleIdeas(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ideas = core.EnrichIdeasWithRedditData(ideas, posts)
-	if err := db.IndexGeneratedPosts(posts, query, provider); err != nil {
-		log.Printf("  [index db error] failed to index generated threads: %v", err)
-	}
 
 	resp := core.IdeasResponse{
 		Ideas:     ideas,
@@ -140,9 +122,6 @@ func handleSave(w http.ResponseWriter, r *http.Request) {
 	if err := db.SaveIdea(idea); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save idea"})
 		return
-	}
-	if err := db.MarkThreadSaved(idea.SampleLink); err != nil {
-		log.Printf("  [index db warn] failed to mark saved thread: %v", err)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})

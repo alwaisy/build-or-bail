@@ -8,8 +8,8 @@
         />
         <title>Build or Bail</title>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <script src="mock.js?v=3"></script>
-        <script src="api.js?v=3"></script>
+        <script src="mock.js?v=4"></script>
+        <script src="api.js?v=4"></script>
         <style>
             :root {
                 --bg: #f2f2f7;
@@ -1642,6 +1642,7 @@
                 try {
                     const saved = await fetchSavedIdeas();
                     connected = mergeSavedIdeas(saved);
+                    await markIdeasSeen(connected).catch(() => {});
                 } catch (e) {
                     console.error("Failed to load saved ideas:", e);
                 }
@@ -1732,7 +1733,18 @@
 
                 try {
                     const res = await fetchIdeas();
-                    currentIdeas = res.ideas;
+                    const pulledIdeas = res.ideas || [];
+                    const savedIdeas = await fetchSavedIdeas().catch(() => []);
+                    await markIdeasSeen(savedIdeas).catch(() => {});
+                    const savedKeys = new Set(savedIdeas.map((idea) => ideaThreadKey(idea)));
+                    const seenKeys = await getSeenThreadKeys().catch(() => new Set());
+
+                    currentIdeas = pulledIdeas.filter((idea) => {
+                        const key = ideaThreadKey(idea);
+                        if (!key) return true;
+                        return !savedKeys.has(key) && !seenKeys.has(key);
+                    });
+                    await markIdeasSeen(currentIdeas).catch(() => {});
 
                     loading.style.display = "none";
                     stopLoadingMessages();

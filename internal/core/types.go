@@ -2,6 +2,7 @@ package core
 
 import (
 	"os"
+	"strings"
 	"time"
 )
 
@@ -64,23 +65,54 @@ func EnrichIdeasWithRedditData(ideas []Idea, posts []RedditPost) []Idea {
 		if ideas[i].PostsFound == 0 && len(posts) > 0 {
 			ideas[i].PostsFound = len(posts)
 		}
-		if ideas[i].SamplePost == "" && len(posts) > 0 {
-			p := posts[0]
-			if len(p.Body) > 200 {
-				ideas[i].SamplePost = p.Body[:197] + "..."
-			} else {
-				ideas[i].SamplePost = p.Body
+		if len(posts) > 0 {
+			p := pickPostForIdea(i, ideas[i], posts)
+			if ideas[i].SampleLink == "" {
+				ideas[i].SampleLink = postLink(p)
 			}
-			if p.Perma != "" {
-				ideas[i].SampleLink = p.Perma
-			} else {
-				ideas[i].SampleLink = p.URL
+			if ideas[i].SamplePost == "" {
+				ideas[i].SamplePost = truncateSampleText(p.Body)
 			}
-			ideas[i].SampleUpvotes = p.Upvotes
-			ideas[i].SampleComments = p.Comments
+			if ideas[i].SampleUpvotes == 0 {
+				ideas[i].SampleUpvotes = p.Upvotes
+			}
+			if ideas[i].SampleComments == 0 {
+				ideas[i].SampleComments = p.Comments
+			}
 		}
 	}
 	return ideas
+}
+
+func pickPostForIdea(i int, idea Idea, posts []RedditPost) RedditPost {
+	sample := strings.ToLower(strings.TrimSpace(idea.SamplePost))
+	if sample != "" {
+		for _, p := range posts {
+			body := strings.ToLower(strings.TrimSpace(p.Body))
+			title := strings.ToLower(strings.TrimSpace(p.Title))
+			if (body != "" && strings.Contains(body, sample)) || (title != "" && strings.Contains(title, sample)) {
+				return p
+			}
+		}
+	}
+	return posts[i%len(posts)]
+}
+
+func postLink(p RedditPost) string {
+	if p.Perma != "" {
+		return p.Perma
+	}
+	return p.URL
+}
+
+func truncateSampleText(body string) string {
+	if len(body) == 0 {
+		return ""
+	}
+	if len(body) > 200 {
+		return body[:197] + "..."
+	}
+	return body
 }
 
 func CachedNow() string {

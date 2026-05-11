@@ -50,3 +50,64 @@ async function removeSavedIdea(id) {
 function loadMock() {
     return { ideas: MOCK_IDEAS, source: "mock", query: "mock" };
 }
+
+const IDEA_INDEX_DB_NAME = "buildorbail";
+const IDEA_INDEX_STORE = "idea_threads";
+
+function ideaThreadKey(idea) {
+    const link = (idea?.sampleLink || "").trim();
+    if (link) return link;
+    return `${(idea?.title || "").trim()}::${(idea?.samplePost || "").trim()}`;
+}
+
+function openIdeaIndexDb() {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(IDEA_INDEX_DB_NAME, 1);
+        req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(IDEA_INDEX_STORE)) {
+                db.createObjectStore(IDEA_INDEX_STORE, { keyPath: "threadKey" });
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function getSeenThreadKeys() {
+    const db = await openIdeaIndexDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDEA_INDEX_STORE, "readonly");
+        const store = tx.objectStore(IDEA_INDEX_STORE);
+        const req = store.getAllKeys();
+        req.onsuccess = () => resolve(new Set((req.result || []).map((k) => String(k))));
+        req.onerror = () => reject(req.error);
+        tx.oncomplete = () => db.close();
+    });
+}
+
+async function markIdeasSeen(ideas) {
+    const db = await openIdeaIndexDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDEA_INDEX_STORE, "readwrite");
+        const store = tx.objectStore(IDEA_INDEX_STORE);
+        const now = new Date().toISOString();
+        ideas.forEach((idea) => {
+            const key = ideaThreadKey(idea);
+            if (!key) return;
+            store.put({
+                threadKey: key,
+                seenAt: now,
+                title: idea.title || "",
+            });
+        });
+        tx.oncomplete = () => {
+            db.close();
+            resolve();
+        };
+        tx.onerror = () => {
+            db.close();
+            reject(tx.error);
+        };
+    });
+}

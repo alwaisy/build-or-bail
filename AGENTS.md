@@ -1,6 +1,6 @@
 # Build or Bail
 
-Go backend that fetches Reddit posts about product frustrations, sends them to an LLM (OpenRouter, Google AI, or Vertex AI) for analysis, and returns scored "build or bail" startup ideas. Single HTML frontend served from the same binary. Persists saved ideas via Turso SQLite; deduplicates processed threads via local JSON index.
+Go backend that fetches Reddit posts about product frustrations, sends them to an LLM (OpenRouter, Google AI, or Vertex AI) for analysis, and returns scored "build or bail" startup ideas. Single HTML frontend served from the same binary. Persists saved ideas via Turso SQLite; deduplicates processed threads in browser IndexedDB.
 
 ## Build & Test
 
@@ -28,26 +28,24 @@ Go backend that fetches Reddit posts about product frustrations, sends them to a
 │  │  └─ prompts/                   → Markdown prompt files (base.md, rules.md, voice.md)
 │  ├─ discovery/reddit.go          → Reddit search with intent queries and engagement filtering
 │  └─ db/
-│     ├─ turso.go                   → Turso SQLite REST API client (persists saved ideas)
-│     └─ local_index.go            → Local JSON index for thread deduplication
+│     └─ turso.go                   → Turso SQLite REST API client (persists saved ideas)
 ├─ web/
 │  ├─ app.html                      → Single-page frontend (~71KB vanilla HTML/JS/CSS)
-│  ├─ api.js                        → Frontend API client (fetchIdeas, fetchConfig, fetchSavedIdeas)
+│  ├─ api.js                        → Frontend API client + IndexedDB thread index
 │  └─ mock.js                       → Mock data fallback for development
-├─ data/idea_index_db.json         → Local thread index (gitignored, created at runtime)
 ├─ .env                             → API keys and config (gitignored)
 └─ .gitignore                       → Ignores binaries, .env, data/, my-office/, .gemini/, .factory/
 ```
 
 ## Architecture Overview
 
-**Request flow:** `GET /api/ideas?q=<query>&provider=<provider>` → if empty query, runs 3 intent queries in parallel → fetches Reddit posts (top, this week) → filters 10+ upvotes AND 50+ comments, excludes meme/gaming/funny/jokes subreddits → deduplicates against local `data/idea_index_db.json` index → dispatches to configured LLM provider with two-part prompt (system=rules.md, user=base.md) → LLM returns JSON array of scored ideas → ideas enriched with Reddit metadata → response JSON.
+**Request flow:** `GET /api/ideas?q=<query>&provider=<provider>` → if empty query, runs 3 intent queries in parallel → fetches Reddit posts (top, this week) → filters 10+ upvotes AND 50+ comments, excludes meme/gaming/funny/jokes subreddits → dispatches to configured LLM provider with two-part prompt (system=rules.md, user=base.md) → LLM returns JSON array of scored ideas → ideas enriched with Reddit metadata → response JSON. Frontend then filters out already-seen/saved thread keys using browser IndexedDB before rendering.
 
-**Persistence layer:** Turso SQLite database via REST API (`TURSO_DB_URL`, `TURSO_AUTH_TOKEN`) stores ideas when user clicks "Build". Local JSON index tracks processed threads to avoid re-analyzing the same Reddit posts within a rolling window.
+**Persistence layer:** Turso SQLite database via REST API (`TURSO_DB_URL`, `TURSO_AUTH_TOKEN`) stores ideas when user clicks "Build". Browser IndexedDB tracks processed thread keys to avoid showing repeat ideas.
 
 **LLM providers:** `openrouter` (default), `google` (Google AI Studio), `vertex` (Google Cloud Vertex AI). All share prompt templates embedded via `//go:embed`. Provider can be overridden per-request via `?provider=` query param.
 
-**Error types:** `reddit_error` (fetch failure), `empty_result` (no posts), `llm_error` (AI processing), `index_db_error` (local index failure). All return JSON with `type`, `error`, `message`.
+**Error types:** `reddit_error` (fetch failure), `empty_result` (no posts), `llm_error` (AI processing). All return JSON with `type`, `error`, `message`.
 
 **Binary:** ~10MB, zero external deps beyond Go standard library. No database, no ORM, no caching layer beyond in-process memory and local JSON index.
 

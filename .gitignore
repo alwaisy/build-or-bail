@@ -16,6 +16,3 @@ my-office/
 # OS files
 .DS_Store
 Thumbs.db
-
-# Local runtime index DB (single-user private history)
-data/idea_index_db.json
