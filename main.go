@@ -18,7 +18,10 @@ import (
 func loadEnv(path string) {
 	f, err := os.Open(path)
 	if err != nil {
-		log.Println("no .env file found, using defaults")
+		// Only log if not in Docker/already has some env vars
+		if os.Getenv("PORT") == "" && os.Getenv("LLM_PROVIDER") == "" {
+			log.Printf("no %s file found, using system environment", path)
+		}
 		return
 	}
 	defer f.Close()
@@ -185,7 +188,7 @@ func main() {
 	// Initialize Turso DB
 	db.InitDB()
 
-	port := core.EnvOr("PORT", "8080")
+	port := core.EnvOr("PORT", "5897")
 
 	mux := http.NewServeMux()
 

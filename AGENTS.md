@@ -127,7 +127,7 @@ When `q` is empty, runs 3 queries in batch:
 - Prompts embedded at compile time via `//go:embed`; rebuild after editing `.md` files
 - IndexedDB thread deduplication runs client-side in browser; no server-side index
 - `SHOW_MOCK=true` in `.env` enables mock data fallback (useful for frontend development)
-- Default port is `8080` but `.env` sets `5897`
+- Default port is `5897` (synced with `.env`)
 - Provider query param (`?provider=google`) overrides `LLM_PROVIDER` env var per-request
 - Turso DB initialized lazily on first save operation; `InitDB()` runs `CREATE TABLE IF NOT EXISTS` + migrations
 

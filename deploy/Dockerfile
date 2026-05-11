@@ -25,9 +25,9 @@ COPY --from=builder /app/internal/ai/prompts ./internal/ai/prompts
 RUN adduser -D -g '' appuser
 USER appuser
 
-EXPOSE 8080
+EXPOSE 5897
 
-ENV PORT=8080
+ENV PORT=5897
 ENV GIN_MODE=release
 
 CMD ["./buildorbail"]

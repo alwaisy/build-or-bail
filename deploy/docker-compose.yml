@@ -7,14 +7,13 @@ services:
     container_name: buildorbail
     restart: unless-stopped
     ports:
-      - "${HOST_PORT:-5897}:8080"
+      - "${HOST_PORT:-5897}:5897"
     env_file:
       - ../.env
     environment:
-      - PORT=8080
-      - SHOW_MOCK=false
+      - PORT=5897
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/config"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:5897/api/config"]
       interval: 30s
       timeout: 10s
       retries: 3

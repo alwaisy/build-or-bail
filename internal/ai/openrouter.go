@@ -63,7 +63,7 @@ func callLLM(apiKey, model string, posts []core.RedditPost) ([]core.Idea, error)
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("HTTP-Referer", "http://localhost:"+core.EnvOr("PORT", "8080"))
+	req.Header.Set("HTTP-Referer", "http://localhost:"+core.EnvOr("PORT", "5897"))
 	req.Header.Set("X-Title", "Build or Bail")
 
 	resp, err := http.DefaultClient.Do(req)
