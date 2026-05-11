@@ -1,6 +1,58 @@
 // Fetches config from /api/config, then controls mock vs real data flow.
 
 let APP_CONFIG = { showMock: true, provider: "openrouter" };
+const AUTH_STORAGE_KEY = "buildorbail_auth_v1";
+let AUTH_SESSION = { email: "", accessToken: "" };
+
+function normalizeEmail(email) {
+    return String(email || "").trim().toLowerCase();
+}
+
+function loadAuthSession() {
+    try {
+        const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        AUTH_SESSION = {
+            email: normalizeEmail(parsed.email),
+            accessToken: String(parsed.accessToken || "").trim(),
+        };
+    } catch (_) {
+        AUTH_SESSION = { email: "", accessToken: "" };
+    }
+}
+
+function hasAuthSession() {
+    return !!(AUTH_SESSION.email && AUTH_SESSION.accessToken);
+}
+
+function getAuthSession() {
+    return { ...AUTH_SESSION };
+}
+
+function setAuthSession(email, accessToken) {
+    AUTH_SESSION = {
+        email: normalizeEmail(email),
+        accessToken: String(accessToken || "").trim(),
+    };
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(AUTH_SESSION));
+    return getAuthSession();
+}
+
+function clearAuthSession() {
+    AUTH_SESSION = { email: "", accessToken: "" };
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+}
+
+function authHeaders() {
+    if (!hasAuthSession()) return {};
+    return {
+        "X-User-Email": AUTH_SESSION.email,
+        "X-User-Token": AUTH_SESSION.accessToken,
+    };
+}
+
+loadAuthSession();
 
 async function parseApiResponse(res, fallbackType = "unknown_error") {
     const raw = await res.text();
@@ -53,12 +105,16 @@ async function fetchIdeas(query) {
     const params = new URLSearchParams();
     if (query) params.set("q", query);
 
-    const res = await fetch("/api/ideas?" + params.toString());
+    const res = await fetch("/api/ideas?" + params.toString(), {
+        headers: authHeaders(),
+    });
     return parseApiResponse(res, "unknown_error");
 }
 
 async function fetchSavedIdeas() {
-    const res = await fetch("/api/saved");
+    const res = await fetch("/api/saved", {
+        headers: authHeaders(),
+    });
     const data = await parseApiResponse(res, "saved_fetch_error");
     return data.ideas || [];
 }
@@ -66,10 +122,52 @@ async function fetchSavedIdeas() {
 async function removeSavedIdea(id) {
     const res = await fetch("/api/unsave", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(),
+        },
         body: JSON.stringify({ id }),
     });
     const data = await parseApiResponse(res, "unsave_error");
+    return data;
+}
+
+async function recordDecision(idea, action) {
+    const res = await fetch("/api/decision", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(),
+        },
+        body: JSON.stringify({
+            action,
+            idea,
+        }),
+    });
+    return parseApiResponse(res, "decision_error");
+}
+
+async function registerUser(email) {
+    const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizeEmail(email) }),
+    });
+    const data = await parseApiResponse(res, "auth_error");
+    return data;
+}
+
+async function loginUser(email, accessToken) {
+    const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            email: normalizeEmail(email),
+            accessToken: String(accessToken || "").trim(),
+        }),
+    });
+    const data = await parseApiResponse(res, "auth_error");
+    setAuthSession(data.email, data.accessToken);
     return data;
 }
 

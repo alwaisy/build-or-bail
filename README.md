@@ -9,6 +9,8 @@ Scans Reddit for real product frustrations, sends them to an LLM for analysis, a
 3. Sends filtered posts to an LLM with a scoring prompt
 4. Returns scored startup ideas: market size, pain intensity, solution gap, monetization potential
 5. Each idea gets a verdict: **Build** (75+), **Maybe** (50-74), or **Bail** (<50)
+6. Users sign in with **email + generated access key** (no password reset flow)
+7. Dedup is per-user and based on prior **Build/Bail decisions**
 
 ## Quick Start
 
@@ -42,12 +44,22 @@ Override per-request: `GET /api/ideas?q=frustrated&provider=google`
 ## API
 
 ```
+POST /api/auth/register                            Create email + access key
+POST /api/auth/login                               Sign in with email + access key
 GET  /api/ideas?q=<query>&provider=<provider>   Generate ideas
 GET  /api/ideas                                  Mega-query (runs 3 intent queries)
 GET  /api/config                                 App config (showMock, provider)
+POST /api/decision                               Record build/bail decision
 POST /api/save                                   Save an idea
 GET  /api/saved                                  Get saved ideas
 POST /api/unsave                                 Remove a saved idea
+```
+
+Protected endpoints require:
+
+```
+X-User-Email: <email>
+X-User-Token: <access key>
 ```
 
 ## Deploy to VPS
@@ -86,7 +98,7 @@ internal/
   db/turso.go               Turso SQLite for saved ideas
 web/
   app.html                  Single-page frontend
-  api.js                    API client + IndexedDB thread dedup
+  api.js                    API client + auth session helpers
   mock.js                   Mock data for development
 deploy/
   Dockerfile                Multi-stage Docker build

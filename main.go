@@ -48,9 +48,37 @@ func loadEnv(path string) {
 
 // ── API: /api/ideas ──────────────────────────────────────────────────────────
 
+func requireUser(w http.ResponseWriter, r *http.Request) (db.User, bool) {
+	email := strings.TrimSpace(r.Header.Get("X-User-Email"))
+	token := strings.TrimSpace(r.Header.Get("X-User-Token"))
+	if email == "" || token == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"type":    "auth_required",
+			"error":   "missing auth headers",
+			"message": "Please sign in to continue.",
+		})
+		return db.User{}, false
+	}
+
+	user, err := db.AuthenticateUser(email, token)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"type":    "auth_invalid",
+			"error":   err.Error(),
+			"message": "Your access key is invalid. Sign in again.",
+		})
+		return db.User{}, false
+	}
+	return user, true
+}
+
 func handleIdeas(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user, ok := requireUser(w, r)
+	if !ok {
 		return
 	}
 
@@ -77,17 +105,6 @@ func handleIdeas(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("  got %d posts from reddit", len(posts))
 
-	// Filter previously-seen threads before LLM (dedup by Reddit thread URL)
-	freshPosts, skipped, err := db.FilterUnindexedPosts(posts)
-	if err != nil {
-		log.Printf("  [db warn] Thread indexing unavailable, proceeding with all posts: %v", err)
-	} else {
-		posts = freshPosts
-		if skipped > 0 {
-			log.Printf("  skipped %d already-indexed threads", skipped)
-		}
-	}
-
 	if len(posts) == 0 {
 		writeJSON(w, http.StatusNotFound, map[string]string{
 			"error":   "no posts found",
@@ -109,10 +126,22 @@ func handleIdeas(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ideas = core.EnrichIdeasWithRedditData(ideas, posts)
-
-	// Mark threads as seen so they won't be re-processed
-	if err := db.IndexThreads(posts); err != nil {
-		log.Printf("  [db warn] Failed to index threads: %v", err)
+	filteredIdeas, skipped, err := db.FilterUndecidedIdeas(user.ID, ideas)
+	if err != nil {
+		log.Printf("  [db warn] decision dedup unavailable, returning all ideas: %v", err)
+	} else {
+		ideas = filteredIdeas
+		if skipped > 0 {
+			log.Printf("  skipped %d already-decided ideas", skipped)
+		}
+	}
+	if len(ideas) == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error":   "no fresh ideas",
+			"type":    "empty_result",
+			"message": "No fresh ideas left right now. Try again later.",
+		})
+		return
 	}
 
 	resp := core.IdeasResponse{
@@ -131,6 +160,10 @@ func handleSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	user, ok := requireUser(w, r)
+	if !ok {
+		return
+	}
 
 	var idea core.Idea
 	if err := json.NewDecoder(r.Body).Decode(&idea); err != nil {
@@ -138,7 +171,7 @@ func handleSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.SaveIdea(idea); err != nil {
+	if err := db.SaveIdea(user.ID, idea); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save idea"})
 		return
 	}
@@ -151,8 +184,12 @@ func handleGetSaved(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	user, ok := requireUser(w, r)
+	if !ok {
+		return
+	}
 
-	ideas, err := db.GetSavedIdeas()
+	ideas, err := db.GetSavedIdeas(user.ID)
 	if err != nil {
 		log.Printf("  [db error] Failed to fetch saved ideas: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to fetch saved ideas"})
@@ -169,6 +206,10 @@ func handleUnsave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	user, ok := requireUser(w, r)
+	if !ok {
+		return
+	}
 
 	var req struct {
 		ID int `json:"id"`
@@ -178,12 +219,108 @@ func handleUnsave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.DeleteSavedIdea(req.ID); err != nil {
+	if err := db.DeleteSavedIdea(user.ID, req.ID); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to remove saved idea"})
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "unsaved"})
+}
+
+func handleDecision(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user, ok := requireUser(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		Action string    `json:"action"`
+		Idea   core.Idea `json:"idea"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+
+	if err := db.RecordDecision(user.ID, req.Idea, req.Action); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "recorded"})
+}
+
+func handleAuthRegister(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"type":    "auth_error",
+			"error":   "invalid json body",
+			"message": "Please enter your email to continue.",
+		})
+		return
+	}
+
+	user, err := db.RegisterUser(req.Email)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"type":    "auth_error",
+			"error":   err.Error(),
+			"message": "Could not create account with that email.",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"email":       user.Email,
+		"accessToken": user.Token,
+	})
+}
+
+func handleAuthLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Email       string `json:"email"`
+		AccessToken string `json:"accessToken"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"type":    "auth_error",
+			"error":   "invalid json body",
+			"message": "Enter email and access key.",
+		})
+		return
+	}
+
+	user, err := db.AuthenticateUser(req.Email, req.AccessToken)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"type":    "auth_invalid",
+			"error":   err.Error(),
+			"message": "Email or access key did not match.",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"email":       user.Email,
+		"accessToken": user.Token,
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
@@ -209,7 +346,10 @@ func main() {
 	mux := http.NewServeMux()
 
 	// API endpoints
+	mux.HandleFunc("/api/auth/register", handleAuthRegister)
+	mux.HandleFunc("/api/auth/login", handleAuthLogin)
 	mux.HandleFunc("/api/ideas", handleIdeas)
+	mux.HandleFunc("/api/decision", handleDecision)
 	mux.HandleFunc("/api/save", handleSave)
 	mux.HandleFunc("/api/saved", handleGetSaved)
 	mux.HandleFunc("/api/unsave", handleUnsave)

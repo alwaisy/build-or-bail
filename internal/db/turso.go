@@ -3,6 +3,8 @@ package db
 import (
 	"buildorbail/internal/core"
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -49,6 +51,12 @@ type tursoResponse struct {
 			Message string `json:"message"`
 		} `json:"error,omitempty"`
 	} `json:"results"`
+}
+
+type User struct {
+	ID    int
+	Email string
+	Token string
 }
 
 func getTursoConfig() (string, string, error) {
@@ -121,6 +129,60 @@ func execTurso(sql string, args []tursoArg) error {
 	return nil
 }
 
+func queryTursoRows(sql string, args []tursoArg) ([][]interface{}, error) {
+	dbURL, token, err := getTursoConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	reqBody := tursoRequest{
+		Requests: []tursoStatement{
+			{
+				Type: "execute",
+				Stmt: tursoStmt{Sql: sql, Args: args},
+			},
+			{Type: "close"},
+		},
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling turso request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", dbURL+"/v2/pipeline", bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("building turso request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("calling turso: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("turso returned %d: %s", resp.StatusCode, string(respBytes))
+	}
+
+	var tResp tursoResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tResp); err != nil {
+		return nil, fmt.Errorf("decoding turso response: %w", err)
+	}
+
+	if len(tResp.Results) == 0 {
+		return nil, fmt.Errorf("turso returned empty results")
+	}
+	if tResp.Results[0].Error != nil {
+		return nil, fmt.Errorf("turso sql error: %s", tResp.Results[0].Error.Message)
+	}
+
+	return tResp.Results[0].Response.Result.Rows, nil
+}
+
 // InitDB creates the ideas table if it doesn't exist
 func InitDB() {
 	_, _, err := getTursoConfig()
@@ -144,12 +206,27 @@ func InitDB() {
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);`, nil)
 
-	// Thread index table - unique constraint on thread URL for dedup
-	execTurso(`CREATE TABLE IF NOT EXISTS buildorbail_threads (
-		thread_url TEXT PRIMARY KEY,
-		first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-		last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
+	// Lightweight users table for multi-user isolation.
+	execTurso(`CREATE TABLE IF NOT EXISTS buildorbail_users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		email TEXT NOT NULL UNIQUE,
+		access_token TEXT NOT NULL UNIQUE,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);`, nil)
+
+	// User decisions: both build + bail are tracked for per-user dedup.
+	execTurso(`CREATE TABLE IF NOT EXISTS buildorbail_user_decisions (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER NOT NULL,
+		decision_key TEXT NOT NULL,
+		decision TEXT NOT NULL,
+		idea_json TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(user_id, decision_key)
+	);`, nil)
+	execTurso(`CREATE INDEX IF NOT EXISTS idx_bob_user_decisions_lookup
+		ON buildorbail_user_decisions (user_id, decision);`, nil)
 
 	log.Println("  [db] Turso database initialized")
 
@@ -164,63 +241,145 @@ func InitDB() {
 	addColumnIfMissing("buildorbail_ideas", "score_pain_intensity INTEGER")
 	addColumnIfMissing("buildorbail_ideas", "score_solution_gap INTEGER")
 	addColumnIfMissing("buildorbail_ideas", "score_monetization INTEGER")
+
+	// Legacy table cleanup (thread-level dedup is no longer used).
+	execTurso(`DROP TABLE IF EXISTS buildorbail_threads;`, nil)
 }
 
-// SaveIdea saves a single idea to Turso when the user explicitly clicks 'Build'
-func SaveIdea(idea core.Idea) error {
-	subsJSON, _ := json.Marshal(idea.Subs)
-	sql := `
-	INSERT INTO buildorbail_ideas (
-		title, summary, problem, target_user, solution, monetization, competitors,
-		total_score, verdict, verdict_label, sample_post, subs_json, posts_found,
-		sample_upvotes, sample_comments, score_market_size, score_pain_intensity,
-		score_solution_gap, score_monetization
+func normalizedEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+func buildDecisionKey(idea core.Idea) string {
+	title := strings.ToLower(strings.TrimSpace(idea.Title))
+	link := strings.ToLower(strings.TrimSpace(idea.SampleLink))
+	sample := strings.ToLower(strings.TrimSpace(idea.SamplePost))
+	summary := strings.ToLower(strings.TrimSpace(idea.Summary))
+	return fmt.Sprintf("%s::%s::%s::%s", title, link, sample, summary)
+}
+
+func newAccessToken() (string, error) {
+	buf := make([]byte, 16) // 32 hex chars
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("failed generating token: %w", err)
+	}
+	return hex.EncodeToString(buf), nil
+}
+
+func RegisterUser(email string) (User, error) {
+	email = normalizedEmail(email)
+	if email == "" || !strings.Contains(email, "@") {
+		return User{}, fmt.Errorf("please enter a valid email")
+	}
+
+	token, err := newAccessToken()
+	if err != nil {
+		return User{}, err
+	}
+
+	sql := `INSERT INTO buildorbail_users (email, access_token) VALUES (?, ?)`
+	args := []tursoArg{
+		{Type: "text", Value: email},
+		{Type: "text", Value: token},
+	}
+	if err := execTurso(sql, args); err != nil {
+		if strings.Contains(err.Error(), "buildorbail_users.email") {
+			return User{}, fmt.Errorf("email already registered. use your access key to sign in")
+		}
+		return User{}, err
+	}
+
+	user, err := AuthenticateUser(email, token)
+	if err != nil {
+		return User{}, err
+	}
+	return user, nil
+}
+
+func AuthenticateUser(email, token string) (User, error) {
+	email = normalizedEmail(email)
+	token = strings.TrimSpace(token)
+	if email == "" || token == "" {
+		return User{}, fmt.Errorf("email and access key are required")
+	}
+
+	rows, err := queryTursoRows(
+		`SELECT id, email, access_token FROM buildorbail_users WHERE email = ? AND access_token = ? LIMIT 1`,
+		[]tursoArg{
+			{Type: "text", Value: email},
+			{Type: "text", Value: token},
+		},
 	)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	if err != nil {
+		return User{}, err
+	}
+	if len(rows) == 0 || len(rows[0]) < 3 {
+		return User{}, fmt.Errorf("invalid credentials")
+	}
+
+	id, _ := strconv.Atoi(parseTursoValue(rows[0][0]))
+	return User{
+		ID:    id,
+		Email: parseTursoValue(rows[0][1]),
+		Token: parseTursoValue(rows[0][2]),
+	}, nil
+}
+
+func RecordDecision(userID int, idea core.Idea, decision string) error {
+	if userID <= 0 {
+		return fmt.Errorf("invalid user")
+	}
+	decision = strings.ToLower(strings.TrimSpace(decision))
+	if decision == "pass" {
+		decision = "bail"
+	}
+	if decision != "build" && decision != "bail" {
+		return fmt.Errorf("invalid decision")
+	}
+
+	ideaJSON, err := json.Marshal(idea)
+	if err != nil {
+		return fmt.Errorf("marshaling idea: %w", err)
+	}
+
+	sql := `
+	INSERT INTO buildorbail_user_decisions (user_id, decision_key, decision, idea_json)
+	VALUES (?, ?, ?, ?)
+	ON CONFLICT(user_id, decision_key)
+	DO UPDATE SET
+		decision = excluded.decision,
+		idea_json = excluded.idea_json,
+		updated_at = CURRENT_TIMESTAMP`
 
 	args := []tursoArg{
-		{Type: "text", Value: idea.Title},
-		{Type: "text", Value: idea.Summary},
-		{Type: "text", Value: idea.Problem},
-		{Type: "text", Value: idea.TargetUser},
-		{Type: "text", Value: idea.Solution},
-		{Type: "text", Value: idea.Monetization},
-		{Type: "text", Value: idea.Competitors},
-		{Type: "integer", Value: fmt.Sprintf("%d", idea.Total)},
-		{Type: "text", Value: idea.VerdictType},
-		{Type: "text", Value: idea.VerdictLabel},
-		{Type: "text", Value: idea.SamplePost},
-		{Type: "text", Value: string(subsJSON)},
-		{Type: "integer", Value: fmt.Sprintf("%d", idea.PostsFound)},
-		{Type: "integer", Value: fmt.Sprintf("%d", idea.SampleUpvotes)},
-		{Type: "integer", Value: fmt.Sprintf("%d", idea.SampleComments)},
-		{Type: "integer", Value: fmt.Sprintf("%d", idea.Scores.MarketSize)},
-		{Type: "integer", Value: fmt.Sprintf("%d", idea.Scores.PainIntensity)},
-		{Type: "integer", Value: fmt.Sprintf("%d", idea.Scores.SolutionGap)},
-		{Type: "integer", Value: fmt.Sprintf("%d", idea.Scores.Monetization)},
+		{Type: "integer", Value: fmt.Sprintf("%d", userID)},
+		{Type: "text", Value: buildDecisionKey(idea)},
+		{Type: "text", Value: decision},
+		{Type: "text", Value: string(ideaJSON)},
 	}
 
-	err := execTurso(sql, args)
-	if err != nil {
-		log.Printf("  [db error] Failed to save idea '%s': %v", idea.Title, err)
+	if err := execTurso(sql, args); err != nil {
+		log.Printf("  [db error] Failed to store %s decision for '%s': %v", decision, idea.Title, err)
 		return err
 	}
-
-	log.Printf("  [db] Saved manually selected idea to Turso: %s", idea.Title)
 	return nil
 }
 
-// DeleteSavedIdea removes a saved idea by database row id.
-func DeleteSavedIdea(id int) error {
-	sql := `DELETE FROM buildorbail_ideas WHERE id = ?`
+func SaveIdea(userID int, idea core.Idea) error {
+	return RecordDecision(userID, idea, "build")
+}
+
+// DeleteSavedIdea removes a saved (build) decision by row id for one user.
+func DeleteSavedIdea(userID, id int) error {
+	sql := `DELETE FROM buildorbail_user_decisions WHERE id = ? AND user_id = ? AND decision = 'build'`
 	args := []tursoArg{
 		{Type: "integer", Value: fmt.Sprintf("%d", id)},
+		{Type: "integer", Value: fmt.Sprintf("%d", userID)},
 	}
 	if err := execTurso(sql, args); err != nil {
-		log.Printf("  [db error] Failed to delete saved idea id=%d: %v", id, err)
+		log.Printf("  [db error] Failed to delete saved idea id=%d user=%d: %v", id, userID, err)
 		return err
 	}
-	log.Printf("  [db] Removed saved idea id=%d", id)
 	return nil
 }
 
@@ -236,115 +395,36 @@ func parseTursoValue(v interface{}) string {
 	return val
 }
 
-func GetSavedIdeas() ([]core.Idea, error) {
-	dbUrl, token, err := getTursoConfig()
+func GetSavedIdeas(userID int) ([]core.Idea, error) {
+	rows, err := queryTursoRows(
+		`SELECT id, idea_json
+		 FROM buildorbail_user_decisions
+		 WHERE user_id = ? AND decision = 'build'
+		 ORDER BY updated_at DESC`,
+		[]tursoArg{{Type: "integer", Value: fmt.Sprintf("%d", userID)}},
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	sql := `
-		SELECT
-			id, title, summary, problem, target_user, solution, monetization, competitors,
-			total_score, verdict, verdict_label, sample_post, subs_json, posts_found,
-			sample_upvotes, sample_comments, score_market_size, score_pain_intensity,
-			score_solution_gap, score_monetization
-		FROM buildorbail_ideas
-		ORDER BY created_at DESC`
-
-	reqBody := tursoRequest{
-		Requests: []tursoStatement{
-			{
-				Type: "execute",
-				Stmt: tursoStmt{Sql: sql},
-			},
-			{Type: "close"},
-		},
-	}
-
-	bodyBytes, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling turso request: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", dbUrl+"/v2/pipeline", bytes.NewReader(bodyBytes))
-	if err != nil {
-		return nil, fmt.Errorf("building turso request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("calling turso: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var tResp tursoResponse
-	if err := json.NewDecoder(resp.Body).Decode(&tResp); err != nil {
-		return nil, fmt.Errorf("decoding turso response: %w", err)
-	}
-
-	if len(tResp.Results) == 0 || tResp.Results[0].Error != nil {
-		errMsg := "unknown error"
-		if len(tResp.Results) > 0 && tResp.Results[0].Error != nil {
-			errMsg = tResp.Results[0].Error.Message
-		}
-		return nil, fmt.Errorf("turso fetch error: %s", errMsg)
-	}
-
-	var ideas []core.Idea
-	rows := tResp.Results[0].Response.Result.Rows
+	ideas := make([]core.Idea, 0, len(rows))
 	for _, row := range rows {
-		if len(row) < 20 {
+		if len(row) < 2 {
 			continue
 		}
-
-		idStr := parseTursoValue(row[0])
-		id, _ := strconv.Atoi(idStr)
-
-		scoreStr := parseTursoValue(row[8])
-		totalScore, _ := strconv.Atoi(scoreStr)
-		postsFound, _ := strconv.Atoi(parseTursoValue(row[13]))
-		sampleUpvotes, _ := strconv.Atoi(parseTursoValue(row[14]))
-		sampleComments, _ := strconv.Atoi(parseTursoValue(row[15]))
-		scoreMarketSize, _ := strconv.Atoi(parseTursoValue(row[16]))
-		scorePainIntensity, _ := strconv.Atoi(parseTursoValue(row[17]))
-		scoreSolutionGap, _ := strconv.Atoi(parseTursoValue(row[18]))
-		scoreMonetization, _ := strconv.Atoi(parseTursoValue(row[19]))
-
-		var subs []string
-		subsRaw := parseTursoValue(row[12])
-		if subsRaw != "" {
-			_ = json.Unmarshal([]byte(subsRaw), &subs)
+		rowID, _ := strconv.Atoi(parseTursoValue(row[0]))
+		raw := parseTursoValue(row[1])
+		if raw == "" {
+			continue
 		}
-
-		idea := core.Idea{
-			ID:             id,
-			Title:          parseTursoValue(row[1]),
-			Summary:        parseTursoValue(row[2]),
-			Problem:        parseTursoValue(row[3]),
-			TargetUser:     parseTursoValue(row[4]),
-			Solution:       parseTursoValue(row[5]),
-			Monetization:   parseTursoValue(row[6]),
-			Competitors:    parseTursoValue(row[7]),
-			Total:          totalScore,
-			VerdictType:    parseTursoValue(row[9]),
-			VerdictLabel:   parseTursoValue(row[10]),
-			SamplePost:     parseTursoValue(row[11]),
-			Subs:           subs,
-			PostsFound:     postsFound,
-			SampleUpvotes:  sampleUpvotes,
-			SampleComments: sampleComments,
-			Scores: core.IdeaScores{
-				MarketSize:    scoreMarketSize,
-				PainIntensity: scorePainIntensity,
-				SolutionGap:   scoreSolutionGap,
-				Monetization:  scoreMonetization,
-			},
+		var idea core.Idea
+		if err := json.Unmarshal([]byte(raw), &idea); err != nil {
+			log.Printf("  [db warn] skipping malformed saved idea row id=%d: %v", rowID, err)
+			continue
 		}
+		idea.ID = rowID
 		ideas = append(ideas, idea)
 	}
-
 	return ideas, nil
 }
 
@@ -358,141 +438,63 @@ func addColumnIfMissing(table, definition string) {
 	}
 }
 
-// ── THREAD DEDUP (BEFORE LLM) ──────────────────────────────────────────────
+func FilterUndecidedIdeas(userID int, ideas []core.Idea) ([]core.Idea, int, error) {
+	if userID <= 0 || len(ideas) == 0 {
+		return ideas, 0, nil
+	}
 
-func threadURL(p core.RedditPost) string {
-	if p.Perma != "" {
-		if strings.HasPrefix(p.Perma, "http://") || strings.HasPrefix(p.Perma, "https://") {
-			return p.Perma
+	keySeen := make(map[string]bool, len(ideas))
+	keys := make([]string, 0, len(ideas))
+	for _, idea := range ideas {
+		key := buildDecisionKey(idea)
+		if key == "" || keySeen[key] {
+			continue
 		}
-		return "https://www.reddit.com" + p.Perma
+		keySeen[key] = true
+		keys = append(keys, key)
 	}
-	if p.URL != "" {
-		return p.URL
-	}
-	return "reddit:" + p.ID
-}
-
-// FilterUnindexedPosts checks Turso for already-seen thread URLs and returns only fresh posts.
-func FilterUnindexedPosts(posts []core.RedditPost) ([]core.RedditPost, int, error) {
-	// Build set of thread URLs to check
-	urls := make([]string, 0, len(posts))
-	urlMap := make(map[string]bool)
-	for _, p := range posts {
-		u := threadURL(p)
-		if !urlMap[u] {
-			urlMap[u] = true
-			urls = append(urls, u)
-		}
+	if len(keys) == 0 {
+		return ideas, 0, nil
 	}
 
-	// Query Turso for existing URLs
-	existing, err := querySeenThreads(urls)
+	placeholders := make([]string, len(keys))
+	args := make([]tursoArg, 0, len(keys)+1)
+	args = append(args, tursoArg{Type: "integer", Value: fmt.Sprintf("%d", userID)})
+	for i, key := range keys {
+		placeholders[i] = "?"
+		args = append(args, tursoArg{Type: "text", Value: key})
+	}
+
+	sql := fmt.Sprintf(`SELECT decision_key
+		FROM buildorbail_user_decisions
+		WHERE user_id = ?
+		  AND decision IN ('build', 'bail')
+		  AND decision_key IN (%s)`, strings.Join(placeholders, ","))
+
+	rows, err := queryTursoRows(sql, args)
 	if err != nil {
-		log.Printf("  [db warn] Turso unreachable for thread dedup, processing all: %v", err)
-		return posts, 0, nil // soft-fail: process everything if Turso is down
+		return ideas, 0, err
 	}
 
-	// Filter
-	filtered := make([]core.RedditPost, 0, len(posts))
+	decided := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		if len(row) == 0 {
+			continue
+		}
+		key := parseTursoValue(row[0])
+		if key != "" {
+			decided[key] = true
+		}
+	}
+
+	filtered := make([]core.Idea, 0, len(ideas))
 	skipped := 0
-	for _, p := range posts {
-		if existing[threadURL(p)] {
+	for _, idea := range ideas {
+		if decided[buildDecisionKey(idea)] {
 			skipped++
 			continue
 		}
-		filtered = append(filtered, p)
+		filtered = append(filtered, idea)
 	}
 	return filtered, skipped, nil
-}
-
-func querySeenThreads(urls []string) (map[string]bool, error) {
-	if len(urls) == 0 {
-		return map[string]bool{}, nil
-	}
-
-	dbUrl, token, err := getTursoConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	// Build placeholders: thread_url IN (?, ?, ...)
-	placeholders := make([]string, len(urls))
-	args := make([]tursoArg, len(urls))
-	for i, u := range urls {
-		placeholders[i] = "?"
-		args[i] = tursoArg{Type: "text", Value: u}
-	}
-
-	sql := fmt.Sprintf("SELECT thread_url FROM buildorbail_threads WHERE thread_url IN (%s)",
-		strings.Join(placeholders, ","))
-
-	reqBody := tursoRequest{
-		Requests: []tursoStatement{
-			{
-				Type: "execute",
-				Stmt: tursoStmt{Sql: sql, Args: args},
-			},
-			{Type: "close"},
-		},
-	}
-
-	bodyBytes, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling turso request: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", dbUrl+"/v2/pipeline", bytes.NewReader(bodyBytes))
-	if err != nil {
-		return nil, fmt.Errorf("building turso request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("calling turso: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var tResp tursoResponse
-	if err := json.NewDecoder(resp.Body).Decode(&tResp); err != nil {
-		return nil, fmt.Errorf("decoding turso response: %w", err)
-	}
-
-	result := make(map[string]bool)
-	for _, r := range tResp.Results {
-		if r.Error != nil {
-			continue
-		}
-		for _, row := range r.Response.Result.Rows {
-			if len(row) > 0 {
-				key := parseTursoValue(row[0])
-				if key != "" {
-					result[key] = true
-				}
-			}
-		}
-	}
-	return result, nil
-}
-
-// IndexThreads marks a batch of Reddit posts as seen in Turso.
-func IndexThreads(posts []core.RedditPost) error {
-	if len(posts) == 0 {
-		return nil
-	}
-
-	// Build multi-row INSERT OR REPLACE
-	values := make([]string, 0, len(posts))
-	args := make([]tursoArg, 0, len(posts)*2)
-	for _, p := range posts {
-		values = append(values, "(?, CURRENT_TIMESTAMP)")
-		args = append(args, tursoArg{Type: "text", Value: threadURL(p)})
-	}
-
-	sql := fmt.Sprintf(`INSERT OR REPLACE INTO buildorbail_threads (thread_url, last_seen)
-		VALUES %s`, strings.Join(values, ", "))
-
-	return execTurso(sql, args)
 }

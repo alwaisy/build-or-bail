@@ -933,12 +933,28 @@
 
             <!-- FEED PAGE -->
             <div id="page-feed" class="page active">
+                <div id="auth-gate" style="padding:16px;display:none;">
+                    <div style="background:var(--card);border:1px solid var(--border-s);border-radius:12px;padding:14px;">
+                        <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px;">Sign in to start</div>
+                        <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:10px;">
+                            Use email + access key. If this is your first time, enter email and generate one.
+                        </div>
+                        <input id="auth-email" type="email" placeholder="you@example.com" style="width:100%;padding:10px 12px;border:1px solid var(--border-s);border-radius:10px;font-size:13px;margin-bottom:8px;font-family:inherit;" />
+                        <input id="auth-token" type="text" placeholder="Access key" style="width:100%;padding:10px 12px;border:1px solid var(--border-s);border-radius:10px;font-size:13px;margin-bottom:10px;font-family:inherit;" />
+                        <div style="display:flex;gap:8px;">
+                            <button onclick="handleAuthRegister()" style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--border-s);border-radius:10px;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Create access key</button>
+                            <button onclick="handleAuthLogin()" style="flex:1;padding:10px 12px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Sign in</button>
+                        </div>
+                        <div id="auth-note" style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5;"></div>
+                    </div>
+                </div>
                 <div class="feed-status">
                     <div class="status-left">
                         <span class="live-dot"></span>
                         <span id="feed-status-text">Ready to pull ideas</span>
                     </div>
                     <span class="mock-pill" id="mock-pill" style="display:none;">SAMPLE</span>
+                    <button id="btn-signout" onclick="handleSignOut()" style="display:none;padding:6px 10px;background:var(--bg);border:1px solid var(--border-s);border-radius:8px;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">Sign out</button>
                 </div>
                 <div id="feed-actions" style="padding:16px;display:flex;gap:8px;">
                     <button onclick="handleFetch()" id="btn-fetch" style="flex:1;padding:13px;background:var(--accent);border:none;border-radius:12px;color:#fff;font-weight:600;cursor:pointer;font-family:inherit;font-size:14px;">Pull ideas</button>
@@ -1272,6 +1288,7 @@
             let dismissed = new Set();
             let chartInst = null;
             let currentIdeas = [];
+            let authUserEmail = "";
 
             // ── HELPERS ──
             function scoreColor(t) {
@@ -1287,6 +1304,31 @@
                     : type === "maybe"
                       ? "v-maybe"
                       : "v-skip";
+            }
+            function updateAuthUI() {
+                const gate = document.getElementById("auth-gate");
+                const actions = document.getElementById("feed-actions");
+                const signout = document.getElementById("btn-signout");
+                const status = document.getElementById("feed-status-text");
+                const note = document.getElementById("auth-note");
+                const session = getAuthSession();
+                const signedIn = hasAuthSession();
+
+                if (signedIn) {
+                    authUserEmail = session.email;
+                    gate.style.display = "none";
+                    actions.style.display = "flex";
+                    signout.style.display = "";
+                    status.textContent = "Signed in as " + authUserEmail;
+                    note.textContent = "";
+                    return;
+                }
+
+                authUserEmail = "";
+                gate.style.display = "block";
+                actions.style.display = "none";
+                signout.style.display = "none";
+                status.textContent = "Sign in to pull ideas";
             }
 
             // ── RENDER FEED ──
@@ -1360,19 +1402,21 @@
                 const el = document.getElementById(`card-${id}`);
                 if (!el) return;
                 el.classList.add(action);
+                const idea = currentIdeas.find((i) => i.id === id);
                 if (action === "build") {
-                    const idea = currentIdeas.find((i) => i.id === id);
                     if (idea && !connected.find((i) => i.id === id)) {
                         connected.push(idea);
-                        // Save to Turso DB
-                        fetch('/api/save', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(idea)
-                        }).catch(err => console.error("Failed to save:", err));
+                        recordDecision(idea, "build").catch((err) => {
+                            console.error("Failed to record build:", err);
+                        });
                     }
                     toast("Saved");
                 } else {
+                    if (idea) {
+                        recordDecision(idea, "bail").catch((err) => {
+                            console.error("Failed to record pass:", err);
+                        });
+                    }
                     toast("Passed");
                 }
                 dismissed.add(id);
@@ -1390,10 +1434,12 @@
                 connected = [];
                 currentIdeas = [];
                 document.getElementById("emptyState").classList.remove("show");
-                document.getElementById("feed-actions").style.display = "flex";
-                document.getElementById("feed-status-text").textContent = "Ready to pull ideas";
+                document.getElementById("feed-status-text").textContent = hasAuthSession()
+                    ? "Signed in as " + authUserEmail
+                    : "Sign in to pull ideas";
                 document.getElementById("mock-pill").style.display = "none";
                 renderFeed();
+                updateAuthUI();
             }
 
             // ── NAVIGATION ──
@@ -1638,6 +1684,16 @@
             async function renderConnected() {
                 const list = document.getElementById("connectedList");
                 const empty = document.getElementById("connectedEmpty");
+                const emptyTitle = empty.querySelector("div:nth-child(1)");
+                const emptyBody = empty.querySelector("div:nth-child(2)");
+
+                if (!hasAuthSession()) {
+                    list.innerHTML = "";
+                    emptyTitle.textContent = "Sign in required.";
+                    emptyBody.textContent = "Enter your email and access key to load saved picks.";
+                    empty.style.display = "block";
+                    return;
+                }
                 
                 try {
                     const saved = await fetchSavedIdeas();
@@ -1649,6 +1705,8 @@
 
                 if (!connected || !connected.length) {
                     list.innerHTML = "";
+                    emptyTitle.textContent = "Nothing saved yet.";
+                    emptyBody.textContent = "Go through the feed. Hit Build on something worth keeping.";
                     empty.style.display = "block";
                     return;
                 }
@@ -1715,6 +1773,10 @@
                     config_error: "Config fetch failed",
                     saved_fetch_error: "Saved ideas unavailable",
                     unsave_error: "Could not remove saved idea",
+                    decision_error: "Could not save decision",
+                    auth_error: "Sign in issue",
+                    auth_required: "Sign in required",
+                    auth_invalid: "Session expired",
                     unknown_error: "Request failed",
                 };
                 return map[type] || (type || "Request failed");
@@ -1729,6 +1791,10 @@
                     config_error: "Couldn’t load app settings. Please refresh and try again.",
                     saved_fetch_error: "Couldn’t load saved ideas right now.",
                     unsave_error: "Couldn’t remove this item right now. Please try again.",
+                    decision_error: "Couldn’t save your choice right now.",
+                    auth_error: "Couldn’t sign in. Check your details and try again.",
+                    auth_required: "Please sign in to continue.",
+                    auth_invalid: "Your session expired. Sign in again.",
                     unknown_error: "Something went wrong. Please try again.",
                 };
                 if (friendlyByType[type]) return friendlyByType[type];
@@ -1746,9 +1812,61 @@
                     document.getElementById("btn-mock").style.display = "";
                     document.getElementById("mock-pill").style.display = "";
                 }
+                updateAuthUI();
+            }
+
+            async function handleAuthRegister() {
+                const emailInput = document.getElementById("auth-email");
+                const tokenInput = document.getElementById("auth-token");
+                const note = document.getElementById("auth-note");
+                const email = emailInput.value.trim();
+                if (!email) {
+                    note.textContent = "Enter your email first.";
+                    return;
+                }
+                try {
+                    const result = await registerUser(email);
+                    tokenInput.value = result.accessToken || "";
+                    note.textContent = "Access key created. Save it now - you will need it next time.";
+                } catch (err) {
+                    note.textContent = err?.message || "Could not create access key.";
+                }
+            }
+
+            async function handleAuthLogin() {
+                const emailInput = document.getElementById("auth-email");
+                const tokenInput = document.getElementById("auth-token");
+                const note = document.getElementById("auth-note");
+                const email = emailInput.value.trim();
+                const token = tokenInput.value.trim();
+                if (!email || !token) {
+                    note.textContent = "Enter email and access key.";
+                    return;
+                }
+                try {
+                    await loginUser(email, token);
+                    note.textContent = "";
+                    updateAuthUI();
+                } catch (err) {
+                    note.textContent = err?.message || "Could not sign in.";
+                }
+            }
+
+            function handleSignOut() {
+                clearAuthSession();
+                dismissed.clear();
+                connected = [];
+                currentIdeas = [];
+                renderFeed();
+                updateAuthUI();
             }
 
             async function handleFetch() {
+                if (!hasAuthSession()) {
+                    updateAuthUI();
+                    toast("Sign in first");
+                    return;
+                }
                 const btn = document.getElementById("btn-fetch");
                 const loading = document.getElementById("feed-loading");
                 const actions = document.getElementById("feed-actions");
@@ -1766,16 +1884,7 @@
 
                 try {
                     const res = await fetchIdeas();
-                    const pulledIdeas = res.ideas || [];
-
-                    // Filter out already-saved ideas
-                    const savedIdeas = await fetchSavedIdeas().catch(() => []);
-                    const savedKeys = new Set(savedIdeas.map((idea) => ideaThreadKey(idea)));
-                    currentIdeas = pulledIdeas.filter((idea) => {
-                        const key = ideaThreadKey(idea);
-                        if (!key) return true;
-                        return !savedKeys.has(key);
-                    });
+                    currentIdeas = res.ideas || [];
 
                     loading.style.display = "none";
                     stopLoadingMessages();
