@@ -8,8 +8,8 @@
         />
         <title>Build or Bail</title>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <script src="mock.js?v=4"></script>
-        <script src="api.js?v=4"></script>
+        <script src="mock.js"></script>
+        <script src="api.js"></script>
         <style>
             :root {
                 --bg: #f2f2f7;
@@ -138,8 +138,12 @@
                 margin-bottom: 20px;
             }
             @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
+                0% {
+                    transform: rotate(0deg);
+                }
+                100% {
+                    transform: rotate(360deg);
+                }
             }
             .loading-text {
                 font-size: 18px;
@@ -173,9 +177,15 @@
                 animation: progressMove 2s infinite ease-in-out;
             }
             @keyframes progressMove {
-                0% { left: -100%; }
-                50% { left: 0; }
-                100% { left: 100%; }
+                0% {
+                    left: -100%;
+                }
+                50% {
+                    left: 0;
+                }
+                100% {
+                    left: 100%;
+                }
             }
 
             /* ── FEED STATUS ── */
@@ -933,19 +943,109 @@
 
             <!-- FEED PAGE -->
             <div id="page-feed" class="page active">
-                <div id="auth-gate" style="padding:16px;display:none;">
-                    <div style="background:var(--card);border:1px solid var(--border-s);border-radius:12px;padding:14px;">
-                        <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px;">Sign in to start</div>
-                        <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:10px;">
-                            Use email + access key. If this is your first time, enter email and generate one.
+                <div id="auth-gate" style="padding: 16px; display: none">
+                    <div
+                        style="
+                            background: var(--card);
+                            border: 1px solid var(--border-s);
+                            border-radius: 12px;
+                            padding: 14px;
+                        "
+                    >
+                        <div
+                            style="
+                                font-size: 14px;
+                                font-weight: 600;
+                                color: var(--text);
+                                margin-bottom: 6px;
+                            "
+                        >
+                            Sign in to start
                         </div>
-                        <input id="auth-email" type="email" placeholder="you@example.com" style="width:100%;padding:10px 12px;border:1px solid var(--border-s);border-radius:10px;font-size:13px;margin-bottom:8px;font-family:inherit;" />
-                        <input id="auth-token" type="text" placeholder="Access key" style="width:100%;padding:10px 12px;border:1px solid var(--border-s);border-radius:10px;font-size:13px;margin-bottom:10px;font-family:inherit;" />
-                        <div style="display:flex;gap:8px;">
-                            <button onclick="handleAuthRegister()" style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--border-s);border-radius:10px;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Create access key</button>
-                            <button onclick="handleAuthLogin()" style="flex:1;padding:10px 12px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Sign in</button>
+                        <div
+                            style="
+                                font-size: 12px;
+                                color: var(--muted);
+                                line-height: 1.5;
+                                margin-bottom: 10px;
+                            "
+                        >
+                            Use email + access key. If this is your first time,
+                            enter email and generate one.
                         </div>
-                        <div id="auth-note" style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5;"></div>
+                        <input
+                            id="auth-email"
+                            type="email"
+                            placeholder="you@example.com"
+                            style="
+                                width: 100%;
+                                padding: 10px 12px;
+                                border: 1px solid var(--border-s);
+                                border-radius: 10px;
+                                font-size: 13px;
+                                margin-bottom: 8px;
+                                font-family: inherit;
+                            "
+                        />
+                        <input
+                            id="auth-token"
+                            type="text"
+                            placeholder="Access key"
+                            style="
+                                width: 100%;
+                                padding: 10px 12px;
+                                border: 1px solid var(--border-s);
+                                border-radius: 10px;
+                                font-size: 13px;
+                                margin-bottom: 10px;
+                                font-family: inherit;
+                            "
+                        />
+                        <div style="display: flex; gap: 8px">
+                            <button
+                                onclick="handleAuthRegister()"
+                                style="
+                                    flex: 1;
+                                    padding: 10px 12px;
+                                    background: var(--bg);
+                                    border: 1px solid var(--border-s);
+                                    border-radius: 10px;
+                                    color: var(--muted);
+                                    font-size: 12px;
+                                    font-weight: 600;
+                                    cursor: pointer;
+                                    font-family: inherit;
+                                "
+                            >
+                                Create access key
+                            </button>
+                            <button
+                                onclick="handleAuthLogin()"
+                                style="
+                                    flex: 1;
+                                    padding: 10px 12px;
+                                    background: var(--accent);
+                                    border: none;
+                                    border-radius: 10px;
+                                    color: #fff;
+                                    font-size: 12px;
+                                    font-weight: 600;
+                                    cursor: pointer;
+                                    font-family: inherit;
+                                "
+                            >
+                                Sign in
+                            </button>
+                        </div>
+                        <div
+                            id="auth-note"
+                            style="
+                                font-size: 11px;
+                                color: var(--muted);
+                                margin-top: 10px;
+                                line-height: 1.5;
+                            "
+                        ></div>
                     </div>
                 </div>
                 <div class="feed-status">
@@ -953,18 +1053,78 @@
                         <span class="live-dot"></span>
                         <span id="feed-status-text">Ready to pull ideas</span>
                     </div>
-                    <span class="mock-pill" id="mock-pill" style="display:none;">SAMPLE</span>
-                    <button id="btn-signout" onclick="handleSignOut()" style="display:none;padding:6px 10px;background:var(--bg);border:1px solid var(--border-s);border-radius:8px;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">Sign out</button>
+                    <span class="mock-pill" id="mock-pill" style="display: none"
+                        >SAMPLE</span
+                    >
+                    <button
+                        id="btn-signout"
+                        onclick="handleSignOut()"
+                        style="
+                            display: none;
+                            padding: 6px 10px;
+                            background: var(--bg);
+                            border: 1px solid var(--border-s);
+                            border-radius: 8px;
+                            color: var(--muted);
+                            font-size: 11px;
+                            font-weight: 600;
+                            cursor: pointer;
+                            font-family: inherit;
+                        "
+                    >
+                        Sign out
+                    </button>
                 </div>
-                <div id="feed-actions" style="padding:16px;display:flex;gap:8px;">
-                    <button onclick="handleFetch()" id="btn-fetch" style="flex:1;padding:13px;background:var(--accent);border:none;border-radius:12px;color:#fff;font-weight:600;cursor:pointer;font-family:inherit;font-size:14px;">Pull ideas</button>
-                    <button onclick="handleMock()" id="btn-mock" style="display:none;flex:1;padding:13px;background:var(--bg);border:1px solid var(--border-s);border-radius:12px;color:var(--muted);font-weight:600;cursor:pointer;font-family:inherit;font-size:14px;">See sample</button>
+                <div
+                    id="feed-actions"
+                    style="padding: 16px; display: flex; gap: 8px"
+                >
+                    <button
+                        onclick="handleFetch()"
+                        id="btn-fetch"
+                        style="
+                            flex: 1;
+                            padding: 13px;
+                            background: var(--accent);
+                            border: none;
+                            border-radius: 12px;
+                            color: #fff;
+                            font-weight: 600;
+                            cursor: pointer;
+                            font-family: inherit;
+                            font-size: 14px;
+                        "
+                    >
+                        Pull ideas
+                    </button>
+                    <button
+                        onclick="handleMock()"
+                        id="btn-mock"
+                        style="
+                            display: none;
+                            flex: 1;
+                            padding: 13px;
+                            background: var(--bg);
+                            border: 1px solid var(--border-s);
+                            border-radius: 12px;
+                            color: var(--muted);
+                            font-weight: 600;
+                            cursor: pointer;
+                            font-family: inherit;
+                            font-size: 14px;
+                        "
+                    >
+                        See sample
+                    </button>
                 </div>
-                <div id="feed-loading" style="display:none;">
+                <div id="feed-loading" style="display: none">
                     <div class="loading-container">
                         <div class="loading-spinner"></div>
                         <div class="loading-text" id="loading-msg">Sorting</div>
-                        <div class="loading-subtext">Reading the posts, dropping the junk, and keeping the ones with real friction.</div>
+                        <div class="loading-subtext">
+                            Reading the posts, dropping the junk, and keeping
+                            the ones with real friction.
+                        </div>
                         <div class="loading-progress-bar">
                             <div class="loading-progress-fill"></div>
                         </div>
@@ -974,9 +1134,9 @@
                 <div class="empty" id="emptyState">
                     <div class="empty-title">That's the stack.</div>
                     <div class="empty-body">
-                        You just made five calls. Keep what feels worth it,
-                        move on from the rest, and come back tomorrow for a
-                        fresh batch.
+                        You just made five calls. Keep what feels worth it, move
+                        on from the rest, and come back tomorrow for a fresh
+                        batch.
                     </div>
                     <button class="empty-btn" onclick="resetFeed()">
                         Reset stack
@@ -1038,11 +1198,11 @@
                             reddit.com/search.json?q=frustrated+with&sort=new&limit=100
                         </div>
                         <div class="hiw-chips">
-                            <span class="hiw-chip"
-                                >why do I have to</span
-                            >
+                            <span class="hiw-chip">why do I have to</span>
                             <span class="hiw-chip">i hate that i have to</span>
-                            <span class="hiw-chip">anyone else dealing with</span>
+                            <span class="hiw-chip"
+                                >anyone else dealing with</span
+                            >
                             <span class="hiw-chip">paying too much for</span>
                             <span class="hiw-chip"
                                 >wish someone would make</span
@@ -1072,13 +1232,15 @@
 
                     <div class="hiw-row">
                         <div class="hiw-step">Step 03</div>
-                        <div class="hiw-title">Ask the model to do the hard part</div>
+                        <div class="hiw-title">
+                            Ask the model to do the hard part
+                        </div>
                         <div class="hiw-desc">
                             Each problem cluster goes through the model with a
                             tight prompt. We ask for the problem, who feels it,
-                            what a workable fix looks like, whether anyone
-                            would pay, and what already exists. Loose
-                            summaries do not help.
+                            what a workable fix looks like, whether anyone would
+                            pay, and what already exists. Loose summaries do not
+                            help.
                         </div>
                     </div>
 
@@ -1191,9 +1353,9 @@
                         <div class="hiw-step">Step 05</div>
                         <div class="hiw-title">Feed adapts to your picks</div>
                         <div class="hiw-desc">
-                            Build means keep it around. Bail means move on.
-                            Over time the feed follows those calls, so the next
-                            batch feels less random.
+                            Build means keep it around. Bail means move on. Over
+                            time the feed follows those calls, so the next batch
+                            feels less random.
                         </div>
                     </div>
                 </div>
@@ -1335,9 +1497,19 @@
             function renderFeed() {
                 const stack = document.getElementById("cardStack");
                 const empty = document.getElementById("emptyState");
-                if (!currentIdeas.length) { stack.innerHTML = ""; empty.classList.remove("show"); return; }
-                const visible = currentIdeas.filter((i) => !dismissed.has(i.id));
-                if (!visible.length) { stack.innerHTML = ""; empty.classList.add("show"); return; }
+                if (!currentIdeas.length) {
+                    stack.innerHTML = "";
+                    empty.classList.remove("show");
+                    return;
+                }
+                const visible = currentIdeas.filter(
+                    (i) => !dismissed.has(i.id),
+                );
+                if (!visible.length) {
+                    stack.innerHTML = "";
+                    empty.classList.add("show");
+                    return;
+                }
                 empty.classList.remove("show");
                 const pct = (v) => Math.round((v / 25) * 100);
                 stack.innerHTML = visible
@@ -1434,9 +1606,10 @@
                 connected = [];
                 currentIdeas = [];
                 document.getElementById("emptyState").classList.remove("show");
-                document.getElementById("feed-status-text").textContent = hasAuthSession()
-                    ? "Signed in as " + authUserEmail
-                    : "Sign in to pull ideas";
+                document.getElementById("feed-status-text").textContent =
+                    hasAuthSession()
+                        ? "Signed in as " + authUserEmail
+                        : "Sign in to pull ideas";
                 document.getElementById("mock-pill").style.display = "none";
                 renderFeed();
                 updateAuthUI();
@@ -1458,26 +1631,26 @@
 
             // ── ROUTER ──
             const routes = {
-                '/': 'feed',
-                '/feed': 'feed',
-                '/build-list': 'connected',
-                '/how-it-works': 'howitworks'
+                "/": "feed",
+                "/feed": "feed",
+                "/build-list": "connected",
+                "/how-it-works": "howitworks",
             };
             function handleRoute() {
-                const hash = window.location.hash.slice(1) || '/';
-                const page = routes[hash] || 'feed';
+                const hash = window.location.hash.slice(1) || "/";
+                const page = routes[hash] || "feed";
                 navigate(page);
             }
             function routerGo(path) {
                 window.location.hash = path;
             }
-            window.addEventListener('hashchange', handleRoute);
-            window.addEventListener('load', handleRoute);
+            window.addEventListener("hashchange", handleRoute);
+            window.addEventListener("load", handleRoute);
 
             // ── DETAIL MODAL ──
             function openDetail(id, source = "feed") {
                 let idea = currentIdeas.find((i) => i.id === id);
-                if (!idea && typeof connected !== 'undefined') {
+                if (!idea && typeof connected !== "undefined") {
                     idea = connected.find((i) => i.id === id);
                 }
                 if (!idea) return;
@@ -1634,7 +1807,9 @@
                         return;
                     }
                     await removeSavedIdea(id);
-                    connected = (connected || []).filter((idea) => idea.id !== id);
+                    connected = (connected || []).filter(
+                        (idea) => idea.id !== id,
+                    );
                     closeDetail();
                     await renderConnected();
                     toast("Removed from saved");
@@ -1650,12 +1825,10 @@
                 return !!(
                     idea &&
                     idea.scores &&
-                    (
-                        Number(idea.scores.marketSize) > 0 ||
+                    (Number(idea.scores.marketSize) > 0 ||
                         Number(idea.scores.painIntensity) > 0 ||
                         Number(idea.scores.solutionGap) > 0 ||
-                        Number(idea.scores.monetization) > 0
-                    )
+                        Number(idea.scores.monetization) > 0)
                 );
             }
             function mergeSavedIdeas(saved) {
@@ -1672,12 +1845,28 @@
                         ...idea,
                         id: idea.id,
                         scores: local.scores || idea.scores,
-                        subs: Array.isArray(idea.subs) && idea.subs.length ? idea.subs : (local.subs || []),
-                        postsFound: Number(idea.postsFound) || Number(local.postsFound) || 0,
-                        sampleUpvotes: Number(idea.sampleUpvotes) || Number(local.sampleUpvotes) || 0,
-                        sampleComments: Number(idea.sampleComments) || Number(local.sampleComments) || 0,
-                        competitors: idea.competitors || local.competitors || "",
-                        verdictLabel: idea.verdictLabel || local.verdictLabel || "Unrated",
+                        subs:
+                            Array.isArray(idea.subs) && idea.subs.length
+                                ? idea.subs
+                                : local.subs || [],
+                        postsFound:
+                            Number(idea.postsFound) ||
+                            Number(local.postsFound) ||
+                            0,
+                        sampleUpvotes:
+                            Number(idea.sampleUpvotes) ||
+                            Number(local.sampleUpvotes) ||
+                            0,
+                        sampleComments:
+                            Number(idea.sampleComments) ||
+                            Number(local.sampleComments) ||
+                            0,
+                        competitors:
+                            idea.competitors || local.competitors || "",
+                        verdictLabel:
+                            idea.verdictLabel ||
+                            local.verdictLabel ||
+                            "Unrated",
                     };
                 });
             }
@@ -1690,11 +1879,12 @@
                 if (!hasAuthSession()) {
                     list.innerHTML = "";
                     emptyTitle.textContent = "Sign in required.";
-                    emptyBody.textContent = "Enter your email and access key to load saved picks.";
+                    emptyBody.textContent =
+                        "Enter your email and access key to load saved picks.";
                     empty.style.display = "block";
                     return;
                 }
-                
+
                 try {
                     const saved = await fetchSavedIdeas();
                     connected = mergeSavedIdeas(saved);
@@ -1706,7 +1896,8 @@
                 if (!connected || !connected.length) {
                     list.innerHTML = "";
                     emptyTitle.textContent = "Nothing saved yet.";
-                    emptyBody.textContent = "Go through the feed. Hit Build on something worth keeping.";
+                    emptyBody.textContent =
+                        "Go through the feed. Hit Build on something worth keeping.";
                     empty.style.display = "block";
                     return;
                 }
@@ -1744,17 +1935,54 @@
             }
 
             // ── LOADING ──
-            const loadingMessages = ["Sorting","Scanning","Filtering","Reading","Counting","Picking","Checking","Culling","Pulling threads","Making sense of it","Gathering posts","Comparing notes","Pinning down pain","Looking again","Keeping the loud ones","Finding repeats","Shaping the shortlist","Working through it","Going post by post","Listening for friction","Reading between the lines","Cutting noise","Sizing things up","Holding the line","Watching for repeats","Mapping the mess","Choosing the sharper ones","Building the stack"];
+            const loadingMessages = [
+                "Sorting",
+                "Scanning",
+                "Filtering",
+                "Reading",
+                "Counting",
+                "Picking",
+                "Checking",
+                "Culling",
+                "Pulling threads",
+                "Making sense of it",
+                "Gathering posts",
+                "Comparing notes",
+                "Pinning down pain",
+                "Looking again",
+                "Keeping the loud ones",
+                "Finding repeats",
+                "Shaping the shortlist",
+                "Working through it",
+                "Going post by post",
+                "Listening for friction",
+                "Reading between the lines",
+                "Cutting noise",
+                "Sizing things up",
+                "Holding the line",
+                "Watching for repeats",
+                "Mapping the mess",
+                "Choosing the sharper ones",
+                "Building the stack",
+            ];
             let loadingInterval;
 
             function startLoadingMessages() {
                 const el = document.getElementById("loading-msg");
                 if (!el) return;
-                el.textContent = loadingMessages[Math.floor(Math.random() * loadingMessages.length)];
+                el.textContent =
+                    loadingMessages[
+                        Math.floor(Math.random() * loadingMessages.length)
+                    ];
                 loadingInterval = setInterval(() => {
                     el.style.opacity = 0;
                     setTimeout(() => {
-                        el.textContent = loadingMessages[Math.floor(Math.random() * loadingMessages.length)];
+                        el.textContent =
+                            loadingMessages[
+                                Math.floor(
+                                    Math.random() * loadingMessages.length,
+                                )
+                            ];
                         el.style.opacity = 1;
                     }, 200);
                 }, 1200);
@@ -1779,30 +2007,42 @@
                     auth_invalid: "Session expired",
                     unknown_error: "Request failed",
                 };
-                return map[type] || (type || "Request failed");
+                return map[type] || type || "Request failed";
             }
 
             function presentErrorMessage(type, msg) {
                 const friendlyByType = {
-                    reddit_error: "Couldn’t load Reddit posts right now. Please try again.",
-                    llm_error: "We found posts, but couldn’t generate ideas right now. Please try again.",
-                    empty_result: "No good matches this round. Try a different query.",
-                    invalid_json: "We hit a temporary server issue. Please try again.",
-                    config_error: "Couldn’t load app settings. Please refresh and try again.",
+                    reddit_error:
+                        "Couldn’t load Reddit posts right now. Please try again.",
+                    llm_error:
+                        "We found posts, but couldn’t generate ideas right now. Please try again.",
+                    empty_result:
+                        "No good matches this round. Try a different query.",
+                    invalid_json:
+                        "We hit a temporary server issue. Please try again.",
+                    config_error:
+                        "Couldn’t load app settings. Please refresh and try again.",
                     saved_fetch_error: "Couldn’t load saved ideas right now.",
-                    unsave_error: "Couldn’t remove this item right now. Please try again.",
+                    unsave_error:
+                        "Couldn’t remove this item right now. Please try again.",
                     decision_error: "Couldn’t save your choice right now.",
-                    auth_error: "Couldn’t sign in. Check your details and try again.",
+                    auth_error:
+                        "Couldn’t sign in. Check your details and try again.",
                     auth_required: "Please sign in to continue.",
                     auth_invalid: "Your session expired. Sign in again.",
                     unknown_error: "Something went wrong. Please try again.",
                 };
                 if (friendlyByType[type]) return friendlyByType[type];
 
-                const text = String(msg || "").replace(/\s+/g, " ").trim();
+                const text = String(msg || "")
+                    .replace(/\s+/g, " ")
+                    .trim();
                 if (!text) return "Something went wrong. Please try again.";
-                if (/^</.test(text)) return "We hit a temporary server issue. Please try again.";
-                return text.length <= 140 ? text : "Something went wrong. Please try again.";
+                if (/^</.test(text))
+                    return "We hit a temporary server issue. Please try again.";
+                return text.length <= 140
+                    ? text
+                    : "Something went wrong. Please try again.";
             }
 
             // ── INIT ──
@@ -1827,9 +2067,11 @@
                 try {
                     const result = await registerUser(email);
                     tokenInput.value = result.accessToken || "";
-                    note.textContent = "Access key created. Save it now - you will need it next time.";
+                    note.textContent =
+                        "Access key created. Save it now - you will need it next time.";
                 } catch (err) {
-                    note.textContent = err?.message || "Could not create access key.";
+                    note.textContent =
+                        err?.message || "Could not create access key.";
                 }
             }
 
@@ -1895,9 +2137,13 @@
                     renderFeed();
 
                     const source = (res.source || "live").toLowerCase();
-                    const isSample = source === "mock" || source === "mock-fallback" || source === "sample";
+                    const isSample =
+                        source === "mock" ||
+                        source === "mock-fallback" ||
+                        source === "sample";
                     const sourceLabel = isSample ? "sample" : "live";
-                    status.textContent = currentIdeas.length + " ideas ready · " + sourceLabel;
+                    status.textContent =
+                        currentIdeas.length + " ideas ready · " + sourceLabel;
                     if (isSample) {
                         pill.style.display = "";
                         pill.textContent = "SAMPLE";
@@ -2002,7 +2248,8 @@
                 actions.style.display = "none";
                 pill.style.display = "";
                 pill.textContent = "SAMPLE";
-                status.textContent = currentIdeas.length + " sample ideas loaded";
+                status.textContent =
+                    currentIdeas.length + " sample ideas loaded";
             }
 
             init();
