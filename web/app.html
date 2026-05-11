@@ -1,0 +1,1803 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+        />
+        <title>Build or Bail</title>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script src="mock.js?v=3"></script>
+        <script src="api.js?v=3"></script>
+        <style>
+            :root {
+                --bg: #f2f2f7;
+                --surface: #ffffff;
+                --border: rgba(60, 60, 67, 0.13);
+                --border-s: #e5e5ea;
+                --text: #1c1c1e;
+                --text2: #3a3a3c;
+                --muted: #8e8e93;
+                --accent: #ff4500;
+                --green: #30d158;
+                --yellow: #ff9f0a;
+                --red: #ff3b30;
+                --r: 16px;
+                --r-sm: 10px;
+            }
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+            body {
+                background: var(--bg);
+                color: var(--text);
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                    "Helvetica Neue", sans-serif;
+                min-height: 100vh;
+                -webkit-font-smoothing: antialiased;
+            }
+            .shell {
+                max-width: 430px;
+                margin: 0 auto;
+                min-height: 100vh;
+                position: relative;
+            }
+
+            /* ── HEADER ── */
+            .header {
+                position: sticky;
+                top: 0;
+                z-index: 50;
+                padding: 13px 16px 11px;
+                background: rgba(242, 242, 247, 0.88);
+                backdrop-filter: blur(20px) saturate(180%);
+                -webkit-backdrop-filter: blur(20px) saturate(180%);
+                border-bottom: 0.5px solid var(--border);
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }
+            .logo {
+                font-size: 19px;
+                font-weight: 700;
+                letter-spacing: -0.4px;
+                color: var(--text);
+                text-decoration: none;
+            }
+            .logo em {
+                color: var(--accent);
+                font-style: normal;
+            }
+            .header-link {
+                font-size: 14px;
+                color: var(--accent);
+                font-weight: 500;
+                background: none;
+                border: none;
+                cursor: pointer;
+                font-family: inherit;
+                padding: 4px 0;
+            }
+
+            /* ── PAGES ── */
+            .page {
+                display: none;
+                padding-bottom: 88px;
+            }
+            .page.active {
+                display: block;
+            }
+            @keyframes slideUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(8px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            .anim {
+                animation: slideUp 0.22s ease both;
+            }
+
+            /* ── PAGE TITLES ── */
+            .page-title {
+                padding: 20px 16px 2px;
+                font-size: 26px;
+                font-weight: 700;
+                letter-spacing: -0.5px;
+            }
+            .page-sub {
+                padding: 4px 16px 16px;
+                font-size: 13px;
+                color: var(--muted);
+                line-height: 1.55;
+            }
+
+            /* ── LOADING STATE ── */
+            .loading-container {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                padding: 60px 20px;
+                text-align: center;
+            }
+            .loading-spinner {
+                width: 48px;
+                height: 48px;
+                border: 3px solid var(--border-s);
+                border-top: 3px solid var(--accent);
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
+                margin-bottom: 20px;
+            }
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            .loading-text {
+                font-size: 18px;
+                font-weight: 600;
+                color: var(--fg);
+                margin-bottom: 8px;
+                min-height: 27px;
+            }
+            .loading-subtext {
+                font-size: 13px;
+                color: var(--muted);
+                max-width: 240px;
+                line-height: 1.5;
+            }
+            .loading-progress-bar {
+                width: 140px;
+                height: 4px;
+                background: var(--border-s);
+                border-radius: 10px;
+                margin-top: 24px;
+                overflow: hidden;
+                position: relative;
+            }
+            .loading-progress-fill {
+                position: absolute;
+                top: 0;
+                left: -100%;
+                width: 100%;
+                height: 100%;
+                background: var(--accent);
+                animation: progressMove 2s infinite ease-in-out;
+            }
+            @keyframes progressMove {
+                0% { left: -100%; }
+                50% { left: 0; }
+                100% { left: 100%; }
+            }
+
+            /* ── FEED STATUS ── */
+            .feed-status {
+                padding: 10px 16px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }
+            .status-left {
+                font-size: 12px;
+                color: var(--muted);
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+            .live-dot {
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: var(--green);
+                flex-shrink: 0;
+            }
+            .mock-pill {
+                font-size: 10px;
+                font-weight: 600;
+                letter-spacing: 0.04em;
+                color: var(--muted);
+                background: var(--border-s);
+                border-radius: 20px;
+                padding: 2px 8px;
+            }
+
+            /* ── CARD ── */
+            .card {
+                background: var(--surface);
+                border-radius: var(--r);
+                border: 0.5px solid var(--border);
+                box-shadow:
+                    0 1px 4px rgba(0, 0, 0, 0.06),
+                    0 0 0 0.5px rgba(0, 0, 0, 0.03);
+                margin: 0 12px 12px;
+                overflow: hidden;
+                transition:
+                    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                    opacity 0.3s ease;
+            }
+            .card.bail {
+                transform: translateX(-120%) rotate(-11deg);
+                opacity: 0;
+                pointer-events: none;
+            }
+            .card.build {
+                transform: translateX(120%) rotate(11deg);
+                opacity: 0;
+                pointer-events: none;
+            }
+
+            .card-source {
+                padding: 8px 14px;
+                border-bottom: 0.5px solid var(--border);
+                display: flex;
+                align-items: center;
+                gap: 7px;
+            }
+            .card-dot {
+                width: 5px;
+                height: 5px;
+                border-radius: 50%;
+                background: var(--accent);
+                flex-shrink: 0;
+            }
+            .card-subs {
+                font-size: 11px;
+                color: var(--muted);
+                flex: 1;
+            }
+            .card-count {
+                font-size: 11px;
+                color: var(--muted);
+                font-variant-numeric: tabular-nums;
+            }
+
+            .card-body {
+                padding: 14px;
+                cursor: pointer;
+            }
+            .card-title {
+                font-size: 17px;
+                font-weight: 700;
+                letter-spacing: -0.3px;
+                color: var(--text);
+                margin-bottom: 5px;
+                line-height: 1.3;
+            }
+            .card-summary {
+                font-size: 13px;
+                color: var(--text2);
+                line-height: 1.55;
+                margin-bottom: 14px;
+            }
+
+            /* Score row */
+            .score-row {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+            }
+            .score-ring {
+                width: 50px;
+                height: 50px;
+                border-radius: 50%;
+                border: 2px solid;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-direction: column;
+                flex-shrink: 0;
+            }
+            .score-num {
+                font-size: 17px;
+                font-weight: 700;
+                line-height: 1;
+                font-variant-numeric: tabular-nums;
+            }
+            .score-right {
+                flex: 1;
+                min-width: 0;
+            }
+
+            /* Verdict */
+            .verdict {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                border-radius: 20px;
+                padding: 3px 9px;
+                font-size: 11px;
+                font-weight: 600;
+                margin-bottom: 8px;
+            }
+            .v-dot {
+                width: 5px;
+                height: 5px;
+                border-radius: 50%;
+                flex-shrink: 0;
+            }
+            .v-build {
+                background: #e5faf0;
+                color: #1a7a3f;
+            }
+            .v-build .v-dot {
+                background: var(--green);
+            }
+            .v-maybe {
+                background: #fff4e5;
+                color: #925a00;
+            }
+            .v-maybe .v-dot {
+                background: var(--yellow);
+            }
+            .v-skip {
+                background: #ffebe9;
+                color: #c0392b;
+            }
+            .v-skip .v-dot {
+                background: var(--red);
+            }
+
+            /* Mini bars */
+            .mini-bars {
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+            }
+            .mbar-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .mbar-label {
+                font-size: 10px;
+                color: var(--muted);
+                width: 76px;
+                flex-shrink: 0;
+            }
+            .mbar-track {
+                flex: 1;
+                height: 3px;
+                border-radius: 2px;
+                background: var(--border-s);
+            }
+            .mbar-fill {
+                height: 100%;
+                border-radius: 2px;
+                background: var(--accent);
+            }
+            .mbar-val {
+                font-size: 10px;
+                color: var(--muted);
+                width: 22px;
+                text-align: right;
+                font-variant-numeric: tabular-nums;
+            }
+
+            /* Reddit sample */
+            .reddit-sample {
+                margin-top: 12px;
+                background: var(--bg);
+                border-radius: var(--r-sm);
+                padding: 10px 12px;
+            }
+            .reddit-sample p {
+                font-size: 12px;
+                color: var(--text2);
+                line-height: 1.6;
+                font-style: italic;
+            }
+            .reddit-meta {
+                margin-top: 6px;
+                display: flex;
+                gap: 12px;
+            }
+            .reddit-meta span {
+                font-size: 11px;
+                color: var(--muted);
+            }
+
+            /* Card actions */
+            .card-actions {
+                display: flex;
+                border-top: 0.5px solid var(--border);
+            }
+            .act-btn {
+                flex: 1;
+                padding: 14px;
+                font-size: 15px;
+                font-weight: 600;
+                border: none;
+                background: none;
+                cursor: pointer;
+                font-family: inherit;
+                transition: background 0.1s;
+            }
+            .act-bail {
+                color: var(--muted);
+                border-right: 0.5px solid var(--border);
+            }
+            .act-bail:hover {
+                background: var(--bg);
+            }
+            .act-build {
+                color: var(--accent);
+            }
+            .act-build:hover {
+                background: rgba(255, 69, 0, 0.05);
+            }
+
+            /* ── BOTTOM NAV ── */
+            .bottom-nav {
+                position: fixed;
+                bottom: 0;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 100%;
+                max-width: 430px;
+                background: rgba(242, 242, 247, 0.92);
+                backdrop-filter: blur(20px) saturate(180%);
+                -webkit-backdrop-filter: blur(20px) saturate(180%);
+                border-top: 0.5px solid var(--border);
+                display: flex;
+                z-index: 50;
+                padding-bottom: env(safe-area-inset-bottom, 0);
+            }
+            .nav-btn {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 3px;
+                padding: 10px 0 8px;
+                background: none;
+                border: none;
+                cursor: pointer;
+                font-size: 10px;
+                font-weight: 500;
+                color: var(--muted);
+                font-family: inherit;
+                transition: color 0.12s;
+                letter-spacing: 0.01em;
+            }
+            .nav-btn.active {
+                color: var(--accent);
+                font-weight: 600;
+            }
+            /* CSS-only nav icons */
+            .nav-lines {
+                display: flex;
+                flex-direction: column;
+                gap: 3px;
+                align-items: center;
+                margin-bottom: 1px;
+            }
+            .nl {
+                height: 2px;
+                background: currentColor;
+                border-radius: 2px;
+                transition: background 0.12s;
+            }
+            .nl-full {
+                width: 18px;
+            }
+            .nl-short {
+                width: 12px;
+            }
+            .nl-mid {
+                width: 15px;
+            }
+
+            /* ── MODAL ── */
+            .modal-overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.38);
+                z-index: 100;
+                display: none;
+                padding: 12px;
+                align-items: center;
+                justify-content: center;
+            }
+            .modal-box {
+                background: var(--surface);
+                border-radius: 20px;
+                overflow: hidden;
+                max-width: 430px;
+                width: 100%;
+                max-height: 90vh;
+                display: flex;
+                flex-direction: column;
+                box-shadow: 0 8px 40px rgba(0, 0, 0, 0.18);
+            }
+            .modal-header {
+                padding: 14px 16px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                border-bottom: 0.5px solid var(--border);
+                flex-shrink: 0;
+            }
+            .modal-title {
+                font-size: 15px;
+                font-weight: 700;
+                flex: 1;
+                line-height: 1.3;
+                padding-right: 10px;
+            }
+            .modal-close {
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                background: var(--border-s);
+                border: none;
+                cursor: pointer;
+                font-size: 13px;
+                color: var(--text2);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+            .modal-body {
+                padding: 16px;
+                overflow-y: auto;
+                flex: 1;
+                min-height: 0;
+            }
+            .modal-footer {
+                display: flex;
+                gap: 8px;
+                padding: 12px 16px;
+                border-top: 0.5px solid var(--border);
+                flex-shrink: 0;
+            }
+            .m-section {
+                margin-bottom: 16px;
+            }
+            .m-label {
+                font-size: 10px;
+                font-weight: 600;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--muted);
+                margin-bottom: 6px;
+            }
+            .m-box {
+                background: var(--bg);
+                border-radius: var(--r-sm);
+                padding: 12px;
+                font-size: 13px;
+                color: var(--text2);
+                line-height: 1.6;
+            }
+
+            /* ── CONNECTED ── */
+            .connected-item {
+                background: var(--surface);
+                border-radius: 14px;
+                border: 0.5px solid var(--border);
+                padding: 14px;
+                margin: 0 12px 8px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                cursor: pointer;
+                transition: opacity 0.1s;
+            }
+            .connected-item:active {
+                opacity: 0.7;
+            }
+            .ci-info {
+                flex: 1;
+                min-width: 0;
+            }
+            .ci-title {
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--text);
+                margin-bottom: 4px;
+                line-height: 1.3;
+            }
+            .ci-chevron {
+                color: var(--muted);
+                font-size: 16px;
+            }
+
+            /* ── HOW IT WORKS ── */
+            .hiw-group {
+                background: var(--surface);
+                border-radius: var(--r);
+                border: 0.5px solid var(--border);
+                margin: 0 12px 12px;
+                overflow: hidden;
+            }
+            .hiw-row {
+                padding: 16px;
+                border-bottom: 0.5px solid var(--border);
+            }
+            .hiw-row:last-child {
+                border-bottom: none;
+            }
+            .hiw-step {
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--accent);
+                margin-bottom: 5px;
+            }
+            .hiw-title {
+                font-size: 15px;
+                font-weight: 700;
+                color: var(--text);
+                margin-bottom: 6px;
+                letter-spacing: -0.2px;
+            }
+            .hiw-desc {
+                font-size: 13px;
+                color: var(--text2);
+                line-height: 1.65;
+            }
+            .hiw-code {
+                margin-top: 10px;
+                background: var(--bg);
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-family: "SF Mono", "Menlo", monospace;
+                font-size: 11px;
+                color: var(--accent);
+                line-height: 1.7;
+                word-break: break-all;
+            }
+            .hiw-chips {
+                margin-top: 8px;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 4px;
+            }
+            .hiw-chip {
+                background: var(--bg);
+                border: 0.5px solid var(--border-s);
+                border-radius: 12px;
+                padding: 3px 9px;
+                font-size: 11px;
+                color: var(--muted);
+            }
+            .score-grid {
+                margin-top: 12px;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+            .score-item-title {
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--text);
+            }
+            .score-item-desc {
+                font-size: 12px;
+                color: var(--muted);
+                margin-top: 2px;
+                line-height: 1.5;
+            }
+            .verdict-key {
+                margin-top: 14px;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+            .vk-row {
+                border-radius: 9px;
+                padding: 7px 12px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+
+            /* ── EMPTY STATE ── */
+            .empty {
+                text-align: center;
+                padding: 64px 28px 40px;
+                display: none;
+            }
+            .empty.show {
+                display: block;
+            }
+            .empty-title {
+                font-size: 20px;
+                font-weight: 700;
+                color: var(--text);
+                margin-bottom: 10px;
+                letter-spacing: -0.3px;
+            }
+            .empty-body {
+                font-size: 14px;
+                color: var(--muted);
+                line-height: 1.65;
+                margin-bottom: 26px;
+            }
+            .empty-btn {
+                background: var(--accent);
+                color: #fff;
+                border: none;
+                border-radius: 22px;
+                padding: 12px 28px;
+                font-size: 14px;
+                font-weight: 600;
+                cursor: pointer;
+                font-family: inherit;
+            }
+
+            /* ── TOAST ── */
+            @keyframes toastIn {
+                from {
+                    opacity: 0;
+                    transform: translateX(-50%) translateY(8px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateX(-50%) translateY(0);
+                }
+            }
+            .toast {
+                position: fixed;
+                bottom: 96px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(44, 44, 46, 0.92);
+                backdrop-filter: blur(12px);
+                color: #fff;
+                padding: 9px 18px;
+                border-radius: 20px;
+                font-size: 13px;
+                font-weight: 500;
+                z-index: 200;
+                white-space: nowrap;
+                animation: toastIn 0.18s ease;
+            }
+
+            /* ── RESPONSIVE: DESKTOP ── */
+            @media (min-width: 768px) {
+                .shell {
+                    max-width: 1024px;
+                }
+                .header {
+                    padding: 16px 24px 13px;
+                }
+                .logo {
+                    font-size: 22px;
+                }
+                .header-link {
+                    font-size: 15px;
+                }
+                .page-title {
+                    padding: 28px 24px 4px;
+                    font-size: 32px;
+                }
+                .page-sub {
+                    padding: 6px 24px 20px;
+                    font-size: 15px;
+                }
+                .feed-status {
+                    padding: 12px 24px;
+                }
+                .status-left {
+                    font-size: 13px;
+                }
+                /* Card grid */
+                #cardStack {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 0 16px;
+                    padding: 0 24px;
+                }
+                .card {
+                    margin: 0 0 16px 0;
+                }
+                .card:last-child:nth-child(odd) {
+                    grid-column: 1 / 2;
+                }
+                .card-source {
+                    padding: 10px 18px;
+                }
+                .card-body {
+                    padding: 18px;
+                }
+                .card-title {
+                    font-size: 19px;
+                }
+                .card-summary {
+                    font-size: 15px;
+                    margin-bottom: 16px;
+                }
+                .score-ring {
+                    width: 56px;
+                    height: 56px;
+                }
+                .score-num {
+                    font-size: 19px;
+                }
+                .mbar-label {
+                    font-size: 11px;
+                    width: 90px;
+                }
+                .mbar-val {
+                    font-size: 11px;
+                    width: 26px;
+                }
+                .reddit-sample {
+                    margin-top: 14px;
+                    padding: 12px 14px;
+                }
+                .reddit-sample p {
+                    font-size: 14px;
+                }
+                .reddit-meta span {
+                    font-size: 12px;
+                }
+                .act-btn {
+                    padding: 16px;
+                    font-size: 16px;
+                }
+                /* Desktop modal */
+                .modal-box {
+                    max-width: 600px;
+                    border-radius: 24px;
+                }
+                .modal-footer {
+                    padding: 14px 24px;
+                }
+                .modal-body {
+                    padding: 24px;
+                }
+                .m-label {
+                    font-size: 11px;
+                }
+                .m-box {
+                    padding: 14px;
+                    font-size: 15px;
+                }
+                /* Connected list */
+                .connected-item {
+                    padding: 16px 18px;
+                    margin: 0 24px 10px;
+                    border-radius: 16px;
+                }
+                .ci-title {
+                    font-size: 16px;
+                }
+                /* How it works */
+                .hiw-group {
+                    margin: 0 24px 16px;
+                }
+                .hiw-row {
+                    padding: 20px;
+                }
+                .hiw-title {
+                    font-size: 17px;
+                }
+                .hiw-desc {
+                    font-size: 15px;
+                }
+                .hiw-code {
+                    font-size: 13px;
+                    padding: 12px 16px;
+                }
+                .hiw-chip {
+                    padding: 4px 12px;
+                    font-size: 12px;
+                }
+                .score-item-title {
+                    font-size: 15px;
+                }
+                .score-item-desc {
+                    font-size: 14px;
+                }
+                /* Empty state */
+                .empty {
+                    padding: 80px 40px 60px;
+                }
+                .empty-title {
+                    font-size: 24px;
+                }
+                .empty-body {
+                    font-size: 16px;
+                }
+                .empty-btn {
+                    padding: 14px 32px;
+                    font-size: 16px;
+                }
+                /* Bottom nav */
+                .bottom-nav {
+                    max-width: 1024px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="shell">
+            <!-- HEADER -->
+            <header class="header">
+                <a class="logo" href="#/feed">Build <em>or</em> Bail</a>
+                <button class="header-link" onclick="routerGo('/how-it-works')">
+                    How it works
+                </button>
+            </header>
+
+            <!-- FEED PAGE -->
+            <div id="page-feed" class="page active">
+                <div class="feed-status">
+                    <div class="status-left">
+                        <span class="live-dot"></span>
+                        <span id="feed-status-text">Ready to pull ideas</span>
+                    </div>
+                    <span class="mock-pill" id="mock-pill" style="display:none;">SAMPLE</span>
+                </div>
+                <div id="feed-actions" style="padding:16px;display:flex;gap:8px;">
+                    <button onclick="handleFetch()" id="btn-fetch" style="flex:1;padding:13px;background:var(--accent);border:none;border-radius:12px;color:#fff;font-weight:600;cursor:pointer;font-family:inherit;font-size:14px;">Pull ideas</button>
+                    <button onclick="handleMock()" id="btn-mock" style="display:none;flex:1;padding:13px;background:var(--bg);border:1px solid var(--border-s);border-radius:12px;color:var(--muted);font-weight:600;cursor:pointer;font-family:inherit;font-size:14px;">See sample</button>
+                </div>
+                <div id="feed-loading" style="display:none;">
+                    <div class="loading-container">
+                        <div class="loading-spinner"></div>
+                        <div class="loading-text" id="loading-msg">Sorting</div>
+                        <div class="loading-subtext">Reading the posts, dropping the junk, and keeping the ones with real friction.</div>
+                        <div class="loading-progress-bar">
+                            <div class="loading-progress-fill"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="cardStack"></div>
+                <div class="empty" id="emptyState">
+                    <div class="empty-title">That's the stack.</div>
+                    <div class="empty-body">
+                        You just made five calls. Keep what feels worth it,
+                        move on from the rest, and come back tomorrow for a
+                        fresh batch.
+                    </div>
+                    <button class="empty-btn" onclick="resetFeed()">
+                        Reset stack
+                    </button>
+                </div>
+            </div>
+
+            <!-- BUILD LIST PAGE -->
+            <div id="page-connected" class="page">
+                <div class="page-title">Saved picks</div>
+                <div class="page-sub">Ideas you chose to keep around.</div>
+                <div id="connectedList"></div>
+                <div
+                    id="connectedEmpty"
+                    style="text-align: center; padding: 60px 28px"
+                >
+                    <div
+                        style="
+                            font-size: 16px;
+                            font-weight: 600;
+                            color: var(--text);
+                            margin-bottom: 8px;
+                        "
+                    >
+                        Nothing saved yet.
+                    </div>
+                    <div
+                        style="
+                            font-size: 13px;
+                            color: var(--muted);
+                            line-height: 1.6;
+                        "
+                    >
+                        Go through the feed. Hit Build on something worth
+                        keeping.
+                    </div>
+                </div>
+            </div>
+
+            <!-- HOW IT WORKS PAGE -->
+            <div id="page-howitworks" class="page">
+                <div class="page-title">How It Works</div>
+                <div class="page-sub">
+                    We pull Reddit posts, clear out the noise, and turn the
+                    sharp ones into a simple call.
+                </div>
+
+                <div class="hiw-group">
+                    <div class="hiw-row">
+                        <div class="hiw-step">Step 01</div>
+                        <div class="hiw-title">Search Reddit</div>
+                        <div class="hiw-desc">
+                            No login. No key. Reddit gives us a public search
+                            endpoint, and we use it to look past founder
+                            circles. Real frustration shows up in random
+                            subreddits, not just startup forums.
+                        </div>
+                        <div class="hiw-code">
+                            reddit.com/search.json?q=frustrated+with&sort=new&limit=100
+                        </div>
+                        <div class="hiw-chips">
+                            <span class="hiw-chip"
+                                >why do I have to</span
+                            >
+                            <span class="hiw-chip">i hate that i have to</span>
+                            <span class="hiw-chip">anyone else dealing with</span>
+                            <span class="hiw-chip">paying too much for</span>
+                            <span class="hiw-chip"
+                                >wish someone would make</span
+                            >
+                            <span class="hiw-chip"
+                                >i can't believe there's no</span
+                            >
+                        </div>
+                    </div>
+
+                    <div class="hiw-row">
+                        <div class="hiw-step">Step 02</div>
+                        <div class="hiw-title">Trim the noise</div>
+                        <div class="hiw-desc">
+                            Hundreds of posts come in. Most never make the cut.
+                            We keep the ones with some traction, skip memes and
+                            gaming chatter, and group repeats so you do not see
+                            the same gripe ten times.
+                        </div>
+                        <div class="hiw-code" style="line-height: 1.9">
+                            In: 847 posts<br />
+                            After filter: 62<br />
+                            After dedup: 18 unique problems<br />
+                            Served today: 5
+                        </div>
+                    </div>
+
+                    <div class="hiw-row">
+                        <div class="hiw-step">Step 03</div>
+                        <div class="hiw-title">Ask the model to do the hard part</div>
+                        <div class="hiw-desc">
+                            Each problem cluster goes through the model with a
+                            tight prompt. We ask for the problem, who feels it,
+                            what a workable fix looks like, whether anyone
+                            would pay, and what already exists. Loose
+                            summaries do not help.
+                        </div>
+                    </div>
+
+                    <div class="hiw-row">
+                        <div class="hiw-step">Step 04</div>
+                        <div class="hiw-title">Score it</div>
+                        <div class="hiw-desc">
+                            A score only matters if you can see why it landed
+                            there. We split it across four parts so the number
+                            is easier to trust.
+                        </div>
+                        <div class="score-grid">
+                            <div>
+                                <div class="score-item-title">
+                                    Market Size
+                                    <span
+                                        style="
+                                            color: var(--muted);
+                                            font-size: 11px;
+                                            font-weight: 400;
+                                        "
+                                        >/ 25</span
+                                    >
+                                </div>
+                                <div class="score-item-desc">
+                                    Post frequency, upvotes, cross-subreddit
+                                    appearances. How many people face this, not
+                                    just how loudly one person complained.
+                                </div>
+                            </div>
+                            <div>
+                                <div class="score-item-title">
+                                    Pain Intensity
+                                    <span
+                                        style="
+                                            color: var(--muted);
+                                            font-size: 11px;
+                                            font-weight: 400;
+                                        "
+                                        >/ 25</span
+                                    >
+                                </div>
+                                <div class="score-item-desc">
+                                    Emotional language, urgency, the same person
+                                    posting about it twice. Chronic pain beats
+                                    acute frustration every time.
+                                </div>
+                            </div>
+                            <div>
+                                <div class="score-item-title">
+                                    Solution Gap
+                                    <span
+                                        style="
+                                            color: var(--muted);
+                                            font-size: 11px;
+                                            font-weight: 400;
+                                        "
+                                        >/ 25</span
+                                    >
+                                </div>
+                                <div class="score-item-desc">
+                                    "Is there a tool for this" posts.
+                                    Cobbled-together workarounds in comments.
+                                    Spreadsheets doing the job software should
+                                    do.
+                                </div>
+                            </div>
+                            <div>
+                                <div class="score-item-title">
+                                    Monetization
+                                    <span
+                                        style="
+                                            color: var(--muted);
+                                            font-size: 11px;
+                                            font-weight: 400;
+                                        "
+                                        >/ 25</span
+                                    >
+                                </div>
+                                <div class="score-item-desc">
+                                    Professional context, mentions of paying for
+                                    alternatives, B2B signals. Don't target
+                                    people who don't pay. They don't pay.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="verdict-key">
+                            <div
+                                class="vk-row"
+                                style="background: #e5faf0; color: #1a7a3f"
+                            >
+                                75–100 → Build it
+                            </div>
+                            <div
+                                class="vk-row"
+                                style="background: #fff4e5; color: #925a00"
+                            >
+                                50–74 → Validate first
+                            </div>
+                            <div
+                                class="vk-row"
+                                style="background: #ffebe9; color: #c0392b"
+                            >
+                                0–49 → Hard pass
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="hiw-row">
+                        <div class="hiw-step">Step 05</div>
+                        <div class="hiw-title">Feed adapts to your picks</div>
+                        <div class="hiw-desc">
+                            Build means keep it around. Bail means move on.
+                            Over time the feed follows those calls, so the next
+                            batch feels less random.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Name section -->
+                <div class="hiw-group" style="margin-top: 0">
+                    <div class="hiw-row">
+                        <div class="hiw-step">The Name</div>
+                        <div class="hiw-title">Why "Build or Bail"</div>
+                        <div class="hiw-desc">
+                            The whole app is one call. You see a problem. You
+                            decide if it is worth your time. No maybe-later
+                            pile. That pile is where ideas go to sit forever.
+                        </div>
+                        <div style="margin-top: 12px">
+                            <div
+                                style="
+                                    font-size: 11px;
+                                    color: var(--muted);
+                                    margin-bottom: 8px;
+                                    font-weight: 600;
+                                    letter-spacing: 0.05em;
+                                    text-transform: uppercase;
+                                "
+                            >
+                                Names we cut
+                            </div>
+                            <div class="hiw-chips">
+                                <span class="hiw-chip">GripeSwipe</span>
+                                <span class="hiw-chip">PainFeed</span>
+                                <span class="hiw-chip">FrustFeed</span>
+                                <span class="hiw-chip">IdeaDrop</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DETAIL MODAL -->
+            <div
+                id="detailModal"
+                class="modal-overlay"
+                onclick="handleModalClick(event)"
+            >
+                <div class="modal-box" id="detailBox"></div>
+            </div>
+
+            <!-- BOTTOM NAV -->
+            <nav class="bottom-nav">
+                <button
+                    id="nav-feed"
+                    class="nav-btn active"
+                    onclick="routerGo('/feed')"
+                >
+                    <div class="nav-lines">
+                        <div class="nl nl-full"></div>
+                        <div class="nl nl-full"></div>
+                        <div class="nl nl-short"></div>
+                    </div>
+                    Feed
+                </button>
+                <button
+                    id="nav-connected"
+                    class="nav-btn"
+                    onclick="routerGo('/build-list')"
+                >
+                    <div class="nav-lines">
+                        <div class="nl nl-short"></div>
+                        <div class="nl nl-full"></div>
+                        <div class="nl nl-short"></div>
+                    </div>
+                    Saved
+                </button>
+                <button
+                    id="nav-howitworks"
+                    class="nav-btn"
+                    onclick="routerGo('/how-it-works')"
+                >
+                    <div class="nav-lines">
+                        <div class="nl nl-full"></div>
+                        <div class="nl nl-mid"></div>
+                        <div class="nl nl-full"></div>
+                    </div>
+                    How It Works
+                </button>
+            </nav>
+        </div>
+
+        <script>
+            // ── STATE ──
+            let connected = [];
+            let dismissed = new Set();
+            let chartInst = null;
+            let currentIdeas = [];
+
+            // ── HELPERS ──
+            function scoreColor(t) {
+                return t >= 75
+                    ? "var(--green)"
+                    : t >= 50
+                      ? "var(--yellow)"
+                      : "var(--red)";
+            }
+            function verdictClass(type) {
+                return type === "build"
+                    ? "v-build"
+                    : type === "maybe"
+                      ? "v-maybe"
+                      : "v-skip";
+            }
+
+            // ── RENDER FEED ──
+            function renderFeed() {
+                const stack = document.getElementById("cardStack");
+                const empty = document.getElementById("emptyState");
+                if (!currentIdeas.length) { stack.innerHTML = ""; empty.classList.remove("show"); return; }
+                const visible = currentIdeas.filter((i) => !dismissed.has(i.id));
+                if (!visible.length) { stack.innerHTML = ""; empty.classList.add("show"); return; }
+                empty.classList.remove("show");
+                const pct = (v) => Math.round((v / 25) * 100);
+                stack.innerHTML = visible
+                    .map((idea, idx) => {
+                        const sc = scoreColor(idea.total);
+                        const vc = verdictClass(idea.verdictType);
+                        const bars = [
+                            ["Market Size", "marketSize"],
+                            ["Pain Intensity", "painIntensity"],
+                            ["Solution Gap", "solutionGap"],
+                            ["Monetization", "monetization"],
+                        ];
+                        return `
+      <div class="card anim" id="card-${idea.id}" style="animation-delay:${idx * 0.06}s">
+        <div class="card-source">
+          <div class="card-dot"></div>
+          <span class="card-subs">${idea.subs.join(" · ")}</span>
+          <span class="card-count">${idea.postsFound.toLocaleString()} posts</span>
+        </div>
+        <div class="card-body" onclick="openDetail(${idea.id}, 'feed')">
+          <div class="card-title">${idea.title}</div>
+          <div class="card-summary">${idea.summary}</div>
+          <div class="score-row">
+            <div class="score-ring" style="border-color:${sc}">
+              <span class="score-num" style="color:${sc}">${idea.total}</span>
+            </div>
+            <div class="score-right">
+              <span class="verdict ${vc}"><span class="v-dot"></span>${idea.verdictLabel}</span>
+              <div class="mini-bars">
+                ${bars
+                    .map(
+                        ([label, key]) => `
+                  <div class="mbar-row">
+                    <span class="mbar-label">${label}</span>
+                    <div class="mbar-track"><div class="mbar-fill" style="width:${pct(idea.scores[key])}%"></div></div>
+                    <span class="mbar-val">${idea.scores[key]}</span>
+                  </div>`,
+                    )
+                    .join("")}
+              </div>
+            </div>
+          </div>
+          <div class="reddit-sample">
+            <p>"${idea.samplePost}"</p>
+            <div class="reddit-meta">
+              <span>↑ ${idea.sampleUpvotes.toLocaleString()}</span>
+              <span>${idea.sampleComments} comments</span>
+            </div>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="act-btn act-bail" onclick="swipe(${idea.id},'bail')">Bail</button>
+                    <button class="act-btn act-build" onclick="swipe(${idea.id},'build')">Build</button>
+        </div>
+      </div>`;
+                    })
+                    .join("");
+            }
+
+            // ── SWIPE ──
+            function swipe(id, action) {
+                const el = document.getElementById(`card-${id}`);
+                if (!el) return;
+                el.classList.add(action);
+                if (action === "build") {
+                    const idea = currentIdeas.find((i) => i.id === id);
+                    if (idea && !connected.find((i) => i.id === id)) {
+                        connected.push(idea);
+                        // Save to Turso DB
+                        fetch('/api/save', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(idea)
+                        }).catch(err => console.error("Failed to save:", err));
+                    }
+                    toast("Saved");
+                } else {
+                    toast("Passed");
+                }
+                dismissed.add(id);
+                setTimeout(() => {
+                    el.remove();
+                    checkEmpty();
+                }, 320);
+            }
+            function checkEmpty() {
+                if (!currentIdeas.filter((i) => !dismissed.has(i.id)).length)
+                    document.getElementById("emptyState").classList.add("show");
+            }
+            function resetFeed() {
+                dismissed.clear();
+                connected = [];
+                currentIdeas = [];
+                document.getElementById("emptyState").classList.remove("show");
+                document.getElementById("feed-actions").style.display = "flex";
+                document.getElementById("feed-status-text").textContent = "Ready to pull ideas";
+                document.getElementById("mock-pill").style.display = "none";
+                renderFeed();
+            }
+
+            // ── NAVIGATION ──
+            function navigate(page) {
+                document
+                    .querySelectorAll(".page")
+                    .forEach((p) => p.classList.remove("active"));
+                document
+                    .querySelectorAll(".nav-btn")
+                    .forEach((b) => b.classList.remove("active"));
+                document.getElementById(`page-${page}`).classList.add("active");
+                const nb = document.getElementById(`nav-${page}`);
+                if (nb) nb.classList.add("active");
+                if (page === "connected") renderConnected();
+            }
+
+            // ── ROUTER ──
+            const routes = {
+                '/': 'feed',
+                '/feed': 'feed',
+                '/build-list': 'connected',
+                '/how-it-works': 'howitworks'
+            };
+            function handleRoute() {
+                const hash = window.location.hash.slice(1) || '/';
+                const page = routes[hash] || 'feed';
+                navigate(page);
+            }
+            function routerGo(path) {
+                window.location.hash = path;
+            }
+            window.addEventListener('hashchange', handleRoute);
+            window.addEventListener('load', handleRoute);
+
+            // ── DETAIL MODAL ──
+            function openDetail(id, source = "feed") {
+                let idea = currentIdeas.find((i) => i.id === id);
+                if (!idea && typeof connected !== 'undefined') {
+                    idea = connected.find((i) => i.id === id);
+                }
+                if (!idea) return;
+                const isSavedSource = source === "saved";
+                const subs = Array.isArray(idea.subs) ? idea.subs : [];
+                const scores = {
+                    marketSize: Number(idea?.scores?.marketSize) || 0,
+                    painIntensity: Number(idea?.scores?.painIntensity) || 0,
+                    solutionGap: Number(idea?.scores?.solutionGap) || 0,
+                    monetization: Number(idea?.scores?.monetization) || 0,
+                };
+                const total = Number(idea.total) || 0;
+                const postsFound = Number(idea.postsFound) || 0;
+                const sampleUpvotes = Number(idea.sampleUpvotes) || 0;
+                const sampleComments = Number(idea.sampleComments) || 0;
+                const title = idea.title || "Untitled idea";
+                const verdictLabel = idea.verdictLabel || "Unrated";
+                const problem = idea.problem || "Not available.";
+                const targetUser = idea.targetUser || "Not available.";
+                const solution = idea.solution || "Not available.";
+                const monetization = idea.monetization || "Not available.";
+                const competitors = idea.competitors || "Not available.";
+                const samplePost = idea.samplePost || "No quote available.";
+                const modalFooter = isSavedSource
+                    ? `
+    <div class="modal-footer">
+      <button onclick="closeDetail();" style="flex:1;padding:13px;background:var(--bg);border:1px solid var(--border-s);border-radius:12px;color:var(--muted);font-weight:600;cursor:pointer;font-family:inherit;font-size:14px;">Close</button>
+      <button onclick="unsaveIdea(${idea.id});" style="flex:1;padding:13px;background:#FF3B30;border:none;border-radius:12px;color:#fff;font-weight:600;cursor:pointer;font-family:inherit;font-size:14px;">Remove from saved</button>
+    </div>`
+                    : `
+    <div class="modal-footer">
+      <button onclick="swipe(${idea.id},'bail');closeDetail();" style="flex:1;padding:13px;background:var(--bg);border:1px solid var(--border-s);border-radius:12px;color:var(--muted);font-weight:600;cursor:pointer;font-family:inherit;font-size:14px;">Bail</button>
+      <button onclick="swipe(${idea.id},'build');closeDetail();" style="flex:1;padding:13px;background:var(--accent);border:none;border-radius:12px;color:#fff;font-weight:600;cursor:pointer;font-family:inherit;font-size:14px;">Build</button>
+    </div>`;
+                const sc = scoreColor(total);
+                const vc = verdictClass(idea.verdictType);
+                document.getElementById("detailBox").innerHTML = `
+                <div class="modal-header">
+      <div class="modal-title">${title}</div>
+      <button class="modal-close" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+        <div class="score-ring" style="border-color:${sc};width:64px;height:64px;border-width:3px;">
+          <span class="score-num" style="color:${sc};font-size:22px;">${total}</span>
+          <span style="font-size:9px;color:var(--muted);">/100</span>
+        </div>
+        <div>
+          <span class="verdict ${vc}" style="font-size:12px;padding:4px 12px;margin-bottom:6px;display:inline-flex;">${verdictLabel}</span>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;">${postsFound.toLocaleString()} posts read</div>
+          <div style="font-size:11px;color:var(--muted);">${subs.join(" · ")}</div>
+        </div>
+      </div>
+      <div class="m-section">
+        <div class="m-label">Score breakdown</div>
+        <div style="background:var(--bg);border-radius:10px;padding:12px 12px 6px;">
+          <canvas id="detailChart" height="140"></canvas>
+        </div>
+      </div>
+       <div class="m-section"><div class="m-label">What hurts</div><div class="m-box">${problem}</div></div>
+       <div class="m-section"><div class="m-label">Who feels it</div><div class="m-box">${targetUser}</div></div>
+       <div class="m-section"><div class="m-label">What could help</div><div class="m-box">${solution}</div></div>
+       <div class="m-section"><div class="m-label">Can people pay</div><div class="m-box">${monetization}</div></div>
+       <div class="m-section"><div class="m-label">What's already out there</div><div class="m-box">${competitors}</div></div>
+       <div class="m-section">
+        <div class="m-label">From Reddit</div>
+        <div class="m-box" style="font-style:italic;">"${samplePost}"
+          <div style="margin-top:8px;display:flex;gap:10px;">
+            <span style="font-size:11px;color:var(--muted);font-style:normal;">↑ ${sampleUpvotes.toLocaleString()}</span>
+            <span style="font-size:11px;color:var(--muted);font-style:normal;">${sampleComments} comments</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    ${modalFooter}`;
+                document.getElementById("detailModal").style.display = "flex";
+                setTimeout(() => {
+                    if (chartInst) {
+                        chartInst.destroy();
+                        chartInst = null;
+                    }
+                    const ctx = document.getElementById("detailChart");
+                    if (!ctx) return;
+                    chartInst = new Chart(ctx, {
+                        type: "bar",
+                        data: {
+                            labels: [
+                                "Market Size",
+                                "Pain Intensity",
+                                "Solution Gap",
+                                "Monetization",
+                            ],
+                            datasets: [
+                                {
+                                    data: [
+                                        scores.marketSize,
+                                        scores.painIntensity,
+                                        scores.solutionGap,
+                                        scores.monetization,
+                                    ],
+                                    backgroundColor: "#FF4500",
+                                    borderRadius: 6,
+                                    borderSkipped: false,
+                                },
+                            ],
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        label: (c) => c.raw + " / 25",
+                                    },
+                                },
+                            },
+                            scales: {
+                                y: {
+                                    max: 25,
+                                    grid: { color: "#E5E5EA" },
+                                    ticks: { color: "#8E8E93", stepSize: 5 },
+                                    border: { display: false },
+                                },
+                                x: {
+                                    grid: { display: false },
+                                    ticks: {
+                                        color: "#8E8E93",
+                                        font: { size: 10 },
+                                    },
+                                    border: { display: false },
+                                },
+                            },
+                        },
+                    });
+                }, 60);
+            }
+            function closeDetail() {
+                document.getElementById("detailModal").style.display = "none";
+                if (chartInst) {
+                    chartInst.destroy();
+                    chartInst = null;
+                }
+            }
+            function handleModalClick(e) {
+                if (e.target === document.getElementById("detailModal"))
+                    closeDetail();
+            }
+
+            // ── CONNECTED ──
+            async function unsaveIdea(id) {
+                try {
+                    if (typeof removeSavedIdea !== "function") {
+                        toast("UI cache is stale. Hard refresh the page.");
+                        return;
+                    }
+                    await removeSavedIdea(id);
+                    connected = (connected || []).filter((idea) => idea.id !== id);
+                    closeDetail();
+                    await renderConnected();
+                    toast("Removed from saved");
+                } catch (e) {
+                    console.error("Failed to remove saved idea:", e);
+                    toast(e?.message || "Could not remove");
+                }
+            }
+            function ideaMergeKey(idea) {
+                return `${(idea?.title || "").trim()}::${(idea?.samplePost || "").trim()}`;
+            }
+            function hasScorePayload(idea) {
+                return !!(
+                    idea &&
+                    idea.scores &&
+                    (
+                        Number(idea.scores.marketSize) > 0 ||
+                        Number(idea.scores.painIntensity) > 0 ||
+                        Number(idea.scores.solutionGap) > 0 ||
+                        Number(idea.scores.monetization) > 0
+                    )
+                );
+            }
+            function mergeSavedIdeas(saved) {
+                const localByKey = new Map();
+                [...currentIdeas, ...connected].forEach((idea) => {
+                    localByKey.set(ideaMergeKey(idea), idea);
+                });
+                return saved.map((idea) => {
+                    const local = localByKey.get(ideaMergeKey(idea));
+                    if (!local) return idea;
+                    if (hasScorePayload(idea)) return idea;
+                    return {
+                        ...local,
+                        ...idea,
+                        id: idea.id,
+                        scores: local.scores || idea.scores,
+                        subs: Array.isArray(idea.subs) && idea.subs.length ? idea.subs : (local.subs || []),
+                        postsFound: Number(idea.postsFound) || Number(local.postsFound) || 0,
+                        sampleUpvotes: Number(idea.sampleUpvotes) || Number(local.sampleUpvotes) || 0,
+                        sampleComments: Number(idea.sampleComments) || Number(local.sampleComments) || 0,
+                        competitors: idea.competitors || local.competitors || "",
+                        verdictLabel: idea.verdictLabel || local.verdictLabel || "Unrated",
+                    };
+                });
+            }
+            async function renderConnected() {
+                const list = document.getElementById("connectedList");
+                const empty = document.getElementById("connectedEmpty");
+                
+                try {
+                    const saved = await fetchSavedIdeas();
+                    connected = mergeSavedIdeas(saved);
+                } catch (e) {
+                    console.error("Failed to load saved ideas:", e);
+                }
+
+                if (!connected || !connected.length) {
+                    list.innerHTML = "";
+                    empty.style.display = "block";
+                    return;
+                }
+                empty.style.display = "none";
+                list.innerHTML = connected
+                    .map((idea) => {
+                        const sc = scoreColor(idea.total);
+                        const vc = verdictClass(idea.verdictType);
+                        return `
+      <div class="connected-item" onclick="openDetail(${idea.id}, 'saved')">
+        <div class="score-ring" style="border-color:${sc};width:44px;height:44px;">
+          <span class="score-num" style="color:${sc};font-size:14px;">${idea.total}</span>
+        </div>
+        <div class="ci-info">
+          <div class="ci-title">${idea.title}</div>
+          <span class="verdict ${vc}" style="font-size:10px;">${idea.verdictLabel}</span>
+        </div>
+        <span class="ci-chevron">›</span>
+      </div>`;
+                    })
+                    .join("");
+            }
+
+            // ── TOAST ──
+            function toast(msg) {
+                const el = document.createElement("div");
+                el.className = "toast";
+                el.textContent = msg;
+                document.body.appendChild(el);
+                setTimeout(() => {
+                    el.style.transition = "opacity 0.2s";
+                    el.style.opacity = "0";
+                    setTimeout(() => el.remove(), 200);
+                }, 1800);
+            }
+
+            // ── LOADING ──
+            const loadingMessages = ["Sorting","Scanning","Filtering","Reading","Counting","Picking","Checking","Culling","Pulling threads","Making sense of it","Gathering posts","Comparing notes","Pinning down pain","Looking again","Keeping the loud ones","Finding repeats","Shaping the shortlist","Working through it","Going post by post","Listening for friction","Reading between the lines","Cutting noise","Sizing things up","Holding the line","Watching for repeats","Mapping the mess","Choosing the sharper ones","Building the stack"];
+            let loadingInterval;
+
+            function startLoadingMessages() {
+                const el = document.getElementById("loading-msg");
+                if (!el) return;
+                el.textContent = loadingMessages[Math.floor(Math.random() * loadingMessages.length)];
+                loadingInterval = setInterval(() => {
+                    el.style.opacity = 0;
+                    setTimeout(() => {
+                        el.textContent = loadingMessages[Math.floor(Math.random() * loadingMessages.length)];
+                        el.style.opacity = 1;
+                    }, 200);
+                }, 1200);
+            }
+
+            function stopLoadingMessages() {
+                clearInterval(loadingInterval);
+            }
+
+            // ── INIT ──
+            async function init() {
+                const config = await fetchConfig();
+                if (config.showMock) {
+                    document.getElementById("btn-mock").style.display = "";
+                    document.getElementById("mock-pill").style.display = "";
+                }
+            }
+
+            async function handleFetch() {
+                const btn = document.getElementById("btn-fetch");
+                const loading = document.getElementById("feed-loading");
+                const actions = document.getElementById("feed-actions");
+                const status = document.getElementById("feed-status-text");
+                const pill = document.getElementById("mock-pill");
+                const errorDiv = document.getElementById("feed-error");
+
+                btn.disabled = true;
+                btn.textContent = "Pulling...";
+                loading.style.display = "block";
+                startLoadingMessages();
+                if (errorDiv) errorDiv.style.display = "none";
+                dismissed.clear();
+                connected = [];
+
+                try {
+                    const res = await fetchIdeas();
+                    currentIdeas = res.ideas;
+
+                    loading.style.display = "none";
+                    stopLoadingMessages();
+                    actions.style.display = "none";
+                    btn.textContent = "Pull ideas";
+                    btn.disabled = false;
+
+                    renderFeed();
+
+                    const source = (res.source || "live").toLowerCase();
+                    const isSample = source === "mock" || source === "mock-fallback" || source === "sample";
+                    const sourceLabel = isSample ? "sample" : "live";
+                    status.textContent = currentIdeas.length + " ideas ready · " + sourceLabel;
+                    if (isSample) {
+                        pill.style.display = "";
+                        pill.textContent = "SAMPLE";
+                    } else {
+                        pill.style.display = "";
+                        pill.textContent = source.toUpperCase();
+                    }
+                } catch (err) {
+                    loading.style.display = "none";
+                    stopLoadingMessages();
+                    btn.textContent = "Pull ideas";
+                    btn.disabled = false;
+
+                    const errType = err.type || "unknown_error";
+                    const errMsg = err.message || "Something went wrong.";
+                    status.textContent = "Could not pull ideas";
+
+                    if (!errorDiv) {
+                        const div = document.createElement("div");
+                        div.id = "feed-error";
+                        document.getElementById("cardStack").before(div);
+                    }
+                    document.getElementById("feed-error").innerHTML =
+                        '<div style="margin:0 12px 12px;background:#FFEBE9;border:0.5px solid rgba(255,59,48,0.2);border-radius:var(--r-sm);padding:14px;">' +
+                        '<div style="font-size:13px;font-weight:600;color:#C0392B;margin-bottom:6px;">' + errType + '</div>' +
+                        '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:10px;">' + errMsg + '</div>' +
+                        '<div style="display:flex;gap:8px;">' +
+                        '<button onclick="handleFetch()" style="padding:8px 16px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Try again</button>' +
+                        (APP_CONFIG.showMock ? '<button onclick="handleMock()" style="padding:8px 16px;background:var(--bg);border:1px solid var(--border-s);border-radius:8px;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">See sample</button>' : '') +
+                        '</div></div>';
+                    document.getElementById("feed-error").style.display = "block";
+                }
+            }
+
+            async function handleMock() {
+                const actions = document.getElementById("feed-actions");
+                const status = document.getElementById("feed-status-text");
+                const pill = document.getElementById("mock-pill");
+
+                dismissed.clear();
+                connected = [];
+                const res = loadMock();
+                currentIdeas = res.ideas;
+                renderFeed();
+
+                actions.style.display = "none";
+                pill.style.display = "";
+                pill.textContent = "SAMPLE";
+                status.textContent = currentIdeas.length + " sample ideas loaded";
+            }
+
+            init();
+        </script>
+    </body>
+</html>

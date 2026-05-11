@@ -1,0 +1,21 @@
+# Binaries
+buildorbail
+*.run
+.run
+
+# Environment variables (contains API keys)
+.env
+
+# Research notes (not code)
+my-office/
+
+# IDE / tool configs
+.gemini/
+.factory/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local runtime index DB (single-user private history)
+data/idea_index_db.json

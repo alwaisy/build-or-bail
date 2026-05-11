@@ -1,0 +1,1692 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+        />
+        <title>Build or Bail</title>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <style>
+            :root {
+                --bg: #f2f2f7;
+                --surface: #ffffff;
+                --border: rgba(60, 60, 67, 0.13);
+                --border-s: #e5e5ea;
+                --text: #1c1c1e;
+                --text2: #3a3a3c;
+                --muted: #8e8e93;
+                --accent: #ff4500;
+                --green: #30d158;
+                --yellow: #ff9f0a;
+                --red: #ff3b30;
+                --r: 16px;
+                --r-sm: 10px;
+            }
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+            body {
+                background: var(--bg);
+                color: var(--text);
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                    "Helvetica Neue", sans-serif;
+                min-height: 100vh;
+                -webkit-font-smoothing: antialiased;
+            }
+            .shell {
+                max-width: 430px;
+                margin: 0 auto;
+                min-height: 100vh;
+                position: relative;
+            }
+
+            /* ── HEADER ── */
+            .header {
+                position: sticky;
+                top: 0;
+                z-index: 50;
+                padding: 13px 16px 11px;
+                background: rgba(242, 242, 247, 0.88);
+                backdrop-filter: blur(20px) saturate(180%);
+                -webkit-backdrop-filter: blur(20px) saturate(180%);
+                border-bottom: 0.5px solid var(--border);
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }
+            .logo {
+                font-size: 19px;
+                font-weight: 700;
+                letter-spacing: -0.4px;
+                color: var(--text);
+                text-decoration: none;
+            }
+            .logo em {
+                color: var(--accent);
+                font-style: normal;
+            }
+            .header-link {
+                font-size: 14px;
+                color: var(--accent);
+                font-weight: 500;
+                background: none;
+                border: none;
+                cursor: pointer;
+                font-family: inherit;
+                padding: 4px 0;
+            }
+
+            /* ── PAGES ── */
+            .page {
+                display: none;
+                padding-bottom: 88px;
+            }
+            .page.active {
+                display: block;
+            }
+            @keyframes slideUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(8px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            .anim {
+                animation: slideUp 0.22s ease both;
+            }
+
+            /* ── PAGE TITLES ── */
+            .page-title {
+                padding: 20px 16px 2px;
+                font-size: 26px;
+                font-weight: 700;
+                letter-spacing: -0.5px;
+            }
+            .page-sub {
+                padding: 4px 16px 16px;
+                font-size: 13px;
+                color: var(--muted);
+                line-height: 1.55;
+            }
+
+            /* ── FEED STATUS ── */
+            .feed-status {
+                padding: 10px 16px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }
+            .status-left {
+                font-size: 12px;
+                color: var(--muted);
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+            .live-dot {
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: var(--green);
+                flex-shrink: 0;
+            }
+            .mock-pill {
+                font-size: 10px;
+                font-weight: 600;
+                letter-spacing: 0.04em;
+                color: var(--muted);
+                background: var(--border-s);
+                border-radius: 20px;
+                padding: 2px 8px;
+            }
+
+            /* ── CARD ── */
+            .card {
+                background: var(--surface);
+                border-radius: var(--r);
+                border: 0.5px solid var(--border);
+                box-shadow:
+                    0 1px 4px rgba(0, 0, 0, 0.06),
+                    0 0 0 0.5px rgba(0, 0, 0, 0.03);
+                margin: 0 12px 12px;
+                overflow: hidden;
+                transition:
+                    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                    opacity 0.3s ease;
+            }
+            .card.bail {
+                transform: translateX(-120%) rotate(-11deg);
+                opacity: 0;
+                pointer-events: none;
+            }
+            .card.build {
+                transform: translateX(120%) rotate(11deg);
+                opacity: 0;
+                pointer-events: none;
+            }
+
+            .card-source {
+                padding: 8px 14px;
+                border-bottom: 0.5px solid var(--border);
+                display: flex;
+                align-items: center;
+                gap: 7px;
+            }
+            .card-dot {
+                width: 5px;
+                height: 5px;
+                border-radius: 50%;
+                background: var(--accent);
+                flex-shrink: 0;
+            }
+            .card-subs {
+                font-size: 11px;
+                color: var(--muted);
+                flex: 1;
+            }
+            .card-count {
+                font-size: 11px;
+                color: var(--muted);
+                font-variant-numeric: tabular-nums;
+            }
+
+            .card-body {
+                padding: 14px;
+                cursor: pointer;
+            }
+            .card-title {
+                font-size: 17px;
+                font-weight: 700;
+                letter-spacing: -0.3px;
+                color: var(--text);
+                margin-bottom: 5px;
+                line-height: 1.3;
+            }
+            .card-summary {
+                font-size: 13px;
+                color: var(--text2);
+                line-height: 1.55;
+                margin-bottom: 14px;
+            }
+
+            /* Score row */
+            .score-row {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+            }
+            .score-ring {
+                width: 50px;
+                height: 50px;
+                border-radius: 50%;
+                border: 2px solid;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-direction: column;
+                flex-shrink: 0;
+            }
+            .score-num {
+                font-size: 17px;
+                font-weight: 700;
+                line-height: 1;
+                font-variant-numeric: tabular-nums;
+            }
+            .score-right {
+                flex: 1;
+                min-width: 0;
+            }
+
+            /* Verdict */
+            .verdict {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                border-radius: 20px;
+                padding: 3px 9px;
+                font-size: 11px;
+                font-weight: 600;
+                margin-bottom: 8px;
+            }
+            .v-dot {
+                width: 5px;
+                height: 5px;
+                border-radius: 50%;
+                flex-shrink: 0;
+            }
+            .v-build {
+                background: #e5faf0;
+                color: #1a7a3f;
+            }
+            .v-build .v-dot {
+                background: var(--green);
+            }
+            .v-maybe {
+                background: #fff4e5;
+                color: #925a00;
+            }
+            .v-maybe .v-dot {
+                background: var(--yellow);
+            }
+            .v-skip {
+                background: #ffebe9;
+                color: #c0392b;
+            }
+            .v-skip .v-dot {
+                background: var(--red);
+            }
+
+            /* Mini bars */
+            .mini-bars {
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+            }
+            .mbar-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .mbar-label {
+                font-size: 10px;
+                color: var(--muted);
+                width: 76px;
+                flex-shrink: 0;
+            }
+            .mbar-track {
+                flex: 1;
+                height: 3px;
+                border-radius: 2px;
+                background: var(--border-s);
+            }
+            .mbar-fill {
+                height: 100%;
+                border-radius: 2px;
+                background: var(--accent);
+            }
+            .mbar-val {
+                font-size: 10px;
+                color: var(--muted);
+                width: 22px;
+                text-align: right;
+                font-variant-numeric: tabular-nums;
+            }
+
+            /* Reddit sample */
+            .reddit-sample {
+                margin-top: 12px;
+                background: var(--bg);
+                border-radius: var(--r-sm);
+                padding: 10px 12px;
+            }
+            .reddit-sample p {
+                font-size: 12px;
+                color: var(--text2);
+                line-height: 1.6;
+                font-style: italic;
+            }
+            .reddit-meta {
+                margin-top: 6px;
+                display: flex;
+                gap: 12px;
+            }
+            .reddit-meta span {
+                font-size: 11px;
+                color: var(--muted);
+            }
+
+            /* Card actions */
+            .card-actions {
+                display: flex;
+                border-top: 0.5px solid var(--border);
+            }
+            .act-btn {
+                flex: 1;
+                padding: 14px;
+                font-size: 15px;
+                font-weight: 600;
+                border: none;
+                background: none;
+                cursor: pointer;
+                font-family: inherit;
+                transition: background 0.1s;
+            }
+            .act-bail {
+                color: var(--muted);
+                border-right: 0.5px solid var(--border);
+            }
+            .act-bail:hover {
+                background: var(--bg);
+            }
+            .act-build {
+                color: var(--accent);
+            }
+            .act-build:hover {
+                background: rgba(255, 69, 0, 0.05);
+            }
+
+            /* ── BOTTOM NAV ── */
+            .bottom-nav {
+                position: fixed;
+                bottom: 0;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 100%;
+                max-width: 430px;
+                background: rgba(242, 242, 247, 0.92);
+                backdrop-filter: blur(20px) saturate(180%);
+                -webkit-backdrop-filter: blur(20px) saturate(180%);
+                border-top: 0.5px solid var(--border);
+                display: flex;
+                z-index: 50;
+                padding-bottom: env(safe-area-inset-bottom, 0);
+            }
+            .nav-btn {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 3px;
+                padding: 10px 0 8px;
+                background: none;
+                border: none;
+                cursor: pointer;
+                font-size: 10px;
+                font-weight: 500;
+                color: var(--muted);
+                font-family: inherit;
+                transition: color 0.12s;
+                letter-spacing: 0.01em;
+            }
+            .nav-btn.active {
+                color: var(--accent);
+                font-weight: 600;
+            }
+            /* CSS-only nav icons */
+            .nav-lines {
+                display: flex;
+                flex-direction: column;
+                gap: 3px;
+                align-items: center;
+                margin-bottom: 1px;
+            }
+            .nl {
+                height: 2px;
+                background: currentColor;
+                border-radius: 2px;
+                transition: background 0.12s;
+            }
+            .nl-full {
+                width: 18px;
+            }
+            .nl-short {
+                width: 12px;
+            }
+            .nl-mid {
+                width: 15px;
+            }
+
+            /* ── MODAL ── */
+            .modal-overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.38);
+                z-index: 100;
+                display: none;
+                padding: 12px;
+                align-items: center;
+                justify-content: center;
+            }
+            .modal-box {
+                background: var(--surface);
+                border-radius: 20px;
+                overflow: hidden;
+                max-width: 430px;
+                width: 100%;
+                max-height: 90vh;
+                display: flex;
+                flex-direction: column;
+                box-shadow: 0 8px 40px rgba(0, 0, 0, 0.18);
+            }
+            .modal-header {
+                padding: 14px 16px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                border-bottom: 0.5px solid var(--border);
+                flex-shrink: 0;
+            }
+            .modal-title {
+                font-size: 15px;
+                font-weight: 700;
+                flex: 1;
+                line-height: 1.3;
+                padding-right: 10px;
+            }
+            .modal-close {
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                background: var(--border-s);
+                border: none;
+                cursor: pointer;
+                font-size: 13px;
+                color: var(--text2);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+            .modal-body {
+                padding: 16px;
+                overflow-y: auto;
+                flex: 1;
+                min-height: 0;
+            }
+            .modal-footer {
+                display: flex;
+                gap: 8px;
+                padding: 12px 16px;
+                border-top: 0.5px solid var(--border);
+                flex-shrink: 0;
+            }
+            .m-section {
+                margin-bottom: 16px;
+            }
+            .m-label {
+                font-size: 10px;
+                font-weight: 600;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--muted);
+                margin-bottom: 6px;
+            }
+            .m-box {
+                background: var(--bg);
+                border-radius: var(--r-sm);
+                padding: 12px;
+                font-size: 13px;
+                color: var(--text2);
+                line-height: 1.6;
+            }
+
+            /* ── CONNECTED ── */
+            .connected-item {
+                background: var(--surface);
+                border-radius: 14px;
+                border: 0.5px solid var(--border);
+                padding: 14px;
+                margin: 0 12px 8px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                cursor: pointer;
+                transition: opacity 0.1s;
+            }
+            .connected-item:active {
+                opacity: 0.7;
+            }
+            .ci-info {
+                flex: 1;
+                min-width: 0;
+            }
+            .ci-title {
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--text);
+                margin-bottom: 4px;
+                line-height: 1.3;
+            }
+            .ci-chevron {
+                color: var(--muted);
+                font-size: 16px;
+            }
+
+            /* ── HOW IT WORKS ── */
+            .hiw-group {
+                background: var(--surface);
+                border-radius: var(--r);
+                border: 0.5px solid var(--border);
+                margin: 0 12px 12px;
+                overflow: hidden;
+            }
+            .hiw-row {
+                padding: 16px;
+                border-bottom: 0.5px solid var(--border);
+            }
+            .hiw-row:last-child {
+                border-bottom: none;
+            }
+            .hiw-step {
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--accent);
+                margin-bottom: 5px;
+            }
+            .hiw-title {
+                font-size: 15px;
+                font-weight: 700;
+                color: var(--text);
+                margin-bottom: 6px;
+                letter-spacing: -0.2px;
+            }
+            .hiw-desc {
+                font-size: 13px;
+                color: var(--text2);
+                line-height: 1.65;
+            }
+            .hiw-code {
+                margin-top: 10px;
+                background: var(--bg);
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-family: "SF Mono", "Menlo", monospace;
+                font-size: 11px;
+                color: var(--accent);
+                line-height: 1.7;
+                word-break: break-all;
+            }
+            .hiw-chips {
+                margin-top: 8px;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 4px;
+            }
+            .hiw-chip {
+                background: var(--bg);
+                border: 0.5px solid var(--border-s);
+                border-radius: 12px;
+                padding: 3px 9px;
+                font-size: 11px;
+                color: var(--muted);
+            }
+            .score-grid {
+                margin-top: 12px;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+            .score-item-title {
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--text);
+            }
+            .score-item-desc {
+                font-size: 12px;
+                color: var(--muted);
+                margin-top: 2px;
+                line-height: 1.5;
+            }
+            .verdict-key {
+                margin-top: 14px;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+            .vk-row {
+                border-radius: 9px;
+                padding: 7px 12px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+
+            /* ── EMPTY STATE ── */
+            .empty {
+                text-align: center;
+                padding: 64px 28px 40px;
+                display: none;
+            }
+            .empty.show {
+                display: block;
+            }
+            .empty-title {
+                font-size: 20px;
+                font-weight: 700;
+                color: var(--text);
+                margin-bottom: 10px;
+                letter-spacing: -0.3px;
+            }
+            .empty-body {
+                font-size: 14px;
+                color: var(--muted);
+                line-height: 1.65;
+                margin-bottom: 26px;
+            }
+            .empty-btn {
+                background: var(--accent);
+                color: #fff;
+                border: none;
+                border-radius: 22px;
+                padding: 12px 28px;
+                font-size: 14px;
+                font-weight: 600;
+                cursor: pointer;
+                font-family: inherit;
+            }
+
+            /* ── TOAST ── */
+            @keyframes toastIn {
+                from {
+                    opacity: 0;
+                    transform: translateX(-50%) translateY(8px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateX(-50%) translateY(0);
+                }
+            }
+            .toast {
+                position: fixed;
+                bottom: 96px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(44, 44, 46, 0.92);
+                backdrop-filter: blur(12px);
+                color: #fff;
+                padding: 9px 18px;
+                border-radius: 20px;
+                font-size: 13px;
+                font-weight: 500;
+                z-index: 200;
+                white-space: nowrap;
+                animation: toastIn 0.18s ease;
+            }
+
+            /* ── RESPONSIVE: DESKTOP ── */
+            @media (min-width: 768px) {
+                .shell {
+                    max-width: 1024px;
+                }
+                .header {
+                    padding: 16px 24px 13px;
+                }
+                .logo {
+                    font-size: 22px;
+                }
+                .header-link {
+                    font-size: 15px;
+                }
+                .page-title {
+                    padding: 28px 24px 4px;
+                    font-size: 32px;
+                }
+                .page-sub {
+                    padding: 6px 24px 20px;
+                    font-size: 15px;
+                }
+                .feed-status {
+                    padding: 12px 24px;
+                }
+                .status-left {
+                    font-size: 13px;
+                }
+                /* Card grid */
+                #cardStack {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 0 16px;
+                    padding: 0 24px;
+                }
+                .card {
+                    margin: 0 0 16px 0;
+                }
+                .card:last-child:nth-child(odd) {
+                    grid-column: 1 / 2;
+                }
+                .card-source {
+                    padding: 10px 18px;
+                }
+                .card-body {
+                    padding: 18px;
+                }
+                .card-title {
+                    font-size: 19px;
+                }
+                .card-summary {
+                    font-size: 15px;
+                    margin-bottom: 16px;
+                }
+                .score-ring {
+                    width: 56px;
+                    height: 56px;
+                }
+                .score-num {
+                    font-size: 19px;
+                }
+                .mbar-label {
+                    font-size: 11px;
+                    width: 90px;
+                }
+                .mbar-val {
+                    font-size: 11px;
+                    width: 26px;
+                }
+                .reddit-sample {
+                    margin-top: 14px;
+                    padding: 12px 14px;
+                }
+                .reddit-sample p {
+                    font-size: 14px;
+                }
+                .reddit-meta span {
+                    font-size: 12px;
+                }
+                .act-btn {
+                    padding: 16px;
+                    font-size: 16px;
+                }
+                /* Desktop modal */
+                .modal-box {
+                    max-width: 600px;
+                    border-radius: 24px;
+                }
+                .modal-footer {
+                    padding: 14px 24px;
+                }
+                .modal-body {
+                    padding: 24px;
+                }
+                .m-label {
+                    font-size: 11px;
+                }
+                .m-box {
+                    padding: 14px;
+                    font-size: 15px;
+                }
+                /* Connected list */
+                .connected-item {
+                    padding: 16px 18px;
+                    margin: 0 24px 10px;
+                    border-radius: 16px;
+                }
+                .ci-title {
+                    font-size: 16px;
+                }
+                /* How it works */
+                .hiw-group {
+                    margin: 0 24px 16px;
+                }
+                .hiw-row {
+                    padding: 20px;
+                }
+                .hiw-title {
+                    font-size: 17px;
+                }
+                .hiw-desc {
+                    font-size: 15px;
+                }
+                .hiw-code {
+                    font-size: 13px;
+                    padding: 12px 16px;
+                }
+                .hiw-chip {
+                    padding: 4px 12px;
+                    font-size: 12px;
+                }
+                .score-item-title {
+                    font-size: 15px;
+                }
+                .score-item-desc {
+                    font-size: 14px;
+                }
+                /* Empty state */
+                .empty {
+                    padding: 80px 40px 60px;
+                }
+                .empty-title {
+                    font-size: 24px;
+                }
+                .empty-body {
+                    font-size: 16px;
+                }
+                .empty-btn {
+                    padding: 14px 32px;
+                    font-size: 16px;
+                }
+                /* Bottom nav */
+                .bottom-nav {
+                    max-width: 1024px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="shell">
+            <!-- HEADER -->
+            <header class="header">
+                <a class="logo" href="#/feed">Build <em>or</em> Bail</a>
+                <button class="header-link" onclick="routerGo('/how-it-works')">
+                    How it works
+                </button>
+            </header>
+
+            <!-- FEED PAGE -->
+            <div id="page-feed" class="page active">
+                <div class="feed-status">
+                    <div class="status-left">
+                        <span class="live-dot"></span>
+                        <span>847 posts read · 2h ago</span>
+                    </div>
+                    <span class="mock-pill">MOCK</span>
+                </div>
+                <div id="cardStack"></div>
+                <div class="empty" id="emptyState">
+                    <div class="empty-title">That's the stack.</div>
+                    <div class="empty-body">
+                        You just made five decisions. Most people open something
+                        like this, save an idea, and never look at it again. You
+                        didn't do that. Come back tomorrow — fresh ideas daily.
+                    </div>
+                    <button class="empty-btn" onclick="resetFeed()">
+                        Reset demo
+                    </button>
+                </div>
+            </div>
+
+            <!-- BUILD LIST PAGE -->
+            <div id="page-connected" class="page">
+                <div class="page-title">Build List</div>
+                <div class="page-sub">Ideas you didn't bail on.</div>
+                <div id="connectedList"></div>
+                <div
+                    id="connectedEmpty"
+                    style="text-align: center; padding: 60px 28px"
+                >
+                    <div
+                        style="
+                            font-size: 16px;
+                            font-weight: 600;
+                            color: var(--text);
+                            margin-bottom: 8px;
+                        "
+                    >
+                        Nothing here yet.
+                    </div>
+                    <div
+                        style="
+                            font-size: 13px;
+                            color: var(--muted);
+                            line-height: 1.6;
+                        "
+                    >
+                        Go through the feed. Hit Build on something.
+                    </div>
+                </div>
+            </div>
+
+            <!-- HOW IT WORKS PAGE -->
+            <div id="page-howitworks" class="page">
+                <div class="page-title">How It Works</div>
+                <div class="page-sub">
+                    Reddit's pain, turned into a decision you can make in 30
+                    seconds. Here's what happens under the hood.
+                </div>
+
+                <div class="hiw-group">
+                    <div class="hiw-row">
+                        <div class="hiw-step">Step 01</div>
+                        <div class="hiw-title">Search Reddit directly</div>
+                        <div class="hiw-desc">
+                            No API key. No login required. Reddit exposes a
+                            public JSON endpoint anyone can hit. We search
+                            across all of Reddit — not just founder communities
+                            — because real frustrations live in random
+                            subreddits, not r/startups. Customers don't post
+                            their pain where founders are watching. That's kind
+                            of the whole point.
+                        </div>
+                        <div class="hiw-code">
+                            reddit.com/search.json?q=frustrated+with&sort=new&limit=100
+                        </div>
+                        <div class="hiw-chips">
+                            <span class="hiw-chip"
+                                >why is there no app for</span
+                            >
+                            <span class="hiw-chip">i hate that i have to</span>
+                            <span class="hiw-chip">anyone else frustrated</span>
+                            <span class="hiw-chip">paying too much for</span>
+                            <span class="hiw-chip"
+                                >wish someone would build</span
+                            >
+                            <span class="hiw-chip"
+                                >i can't believe there's no</span
+                            >
+                        </div>
+                    </div>
+
+                    <div class="hiw-row">
+                        <div class="hiw-step">Step 02</div>
+                        <div class="hiw-title">Filter down hard</div>
+                        <div class="hiw-desc">
+                            847 posts come in. Most are noise. We run them
+                            through a filter: 10+ upvotes, real comments, not a
+                            meme or gaming sub, not already processed in the
+                            last 30 days. Then we cluster similar complaints —
+                            so you're not seeing 18 cards about the same problem
+                            with different wording.
+                        </div>
+                        <div class="hiw-code" style="line-height: 1.9">
+                            In: 847 posts<br />
+                            After filter: 62<br />
+                            After dedup: 18 unique problems<br />
+                            Served today: 5
+                        </div>
+                    </div>
+
+                    <div class="hiw-row">
+                        <div class="hiw-step">Step 03</div>
+                        <div class="hiw-title">LLM structures the idea</div>
+                        <div class="hiw-desc">
+                            Each problem cluster goes to Claude via OpenRouter.
+                            Not "summarize this" — we give it a strict prompt
+                            asking for specific outputs: problem in one
+                            sentence, who exactly has it, what a buildable
+                            solution looks like, whether someone would pay, and
+                            what already exists. Vague summaries are useless.
+                            Structured extraction is the whole thing.
+                        </div>
+                    </div>
+
+                    <div class="hiw-row">
+                        <div class="hiw-step">Step 04</div>
+                        <div class="hiw-title">Scoring (0–100)</div>
+                        <div class="hiw-desc">
+                            Here's the rub. A score without showing your work
+                            means nothing. "74" is useless. "74 because: market
+                            exists, low competition, three subreddits
+                            complaining about this" — that's something you can
+                            actually act on. Each idea scores across four
+                            things:
+                        </div>
+                        <div class="score-grid">
+                            <div>
+                                <div class="score-item-title">
+                                    Market Size
+                                    <span
+                                        style="
+                                            color: var(--muted);
+                                            font-size: 11px;
+                                            font-weight: 400;
+                                        "
+                                        >/ 25</span
+                                    >
+                                </div>
+                                <div class="score-item-desc">
+                                    Post frequency, upvotes, cross-subreddit
+                                    appearances. How many people face this, not
+                                    just how loudly one person complained.
+                                </div>
+                            </div>
+                            <div>
+                                <div class="score-item-title">
+                                    Pain Intensity
+                                    <span
+                                        style="
+                                            color: var(--muted);
+                                            font-size: 11px;
+                                            font-weight: 400;
+                                        "
+                                        >/ 25</span
+                                    >
+                                </div>
+                                <div class="score-item-desc">
+                                    Emotional language, urgency, the same person
+                                    posting about it twice. Chronic pain beats
+                                    acute frustration every time.
+                                </div>
+                            </div>
+                            <div>
+                                <div class="score-item-title">
+                                    Solution Gap
+                                    <span
+                                        style="
+                                            color: var(--muted);
+                                            font-size: 11px;
+                                            font-weight: 400;
+                                        "
+                                        >/ 25</span
+                                    >
+                                </div>
+                                <div class="score-item-desc">
+                                    "Is there a tool for this" posts.
+                                    Cobbled-together workarounds in comments.
+                                    Spreadsheets doing the job software should
+                                    do.
+                                </div>
+                            </div>
+                            <div>
+                                <div class="score-item-title">
+                                    Monetization
+                                    <span
+                                        style="
+                                            color: var(--muted);
+                                            font-size: 11px;
+                                            font-weight: 400;
+                                        "
+                                        >/ 25</span
+                                    >
+                                </div>
+                                <div class="score-item-desc">
+                                    Professional context, mentions of paying for
+                                    alternatives, B2B signals. Don't target
+                                    people who don't pay. They don't pay.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="verdict-key">
+                            <div
+                                class="vk-row"
+                                style="background: #e5faf0; color: #1a7a3f"
+                            >
+                                75–100 → Build it
+                            </div>
+                            <div
+                                class="vk-row"
+                                style="background: #fff4e5; color: #925a00"
+                            >
+                                50–74 → Validate first
+                            </div>
+                            <div
+                                class="vk-row"
+                                style="background: #ffebe9; color: #c0392b"
+                            >
+                                0–49 → Hard pass
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="hiw-row">
+                        <div class="hiw-step">Step 05</div>
+                        <div class="hiw-title">
+                            Feed learns what you actually want to build
+                        </div>
+                        <div class="hiw-desc">
+                            Build = liked it. Bail = not for you. Over time the
+                            feed adjusts by category, market size preference,
+                            and score range. The more decisions you make, the
+                            less random it gets. Day one you're getting a cold
+                            feed. That's just how it works — the algorithm needs
+                            data before it has anything useful to say.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Name section -->
+                <div class="hiw-group" style="margin-top: 0">
+                    <div class="hiw-row">
+                        <div class="hiw-step">The Name</div>
+                        <div class="hiw-title">Why "Build or Bail"</div>
+                        <div class="hiw-desc">
+                            The whole app is one decision. You see a problem.
+                            You decide if it's worth your time. There's no
+                            "maybe later" pile. That pile is where ideas go to
+                            die. Build or Bail forces the call.
+                        </div>
+                        <div style="margin-top: 12px">
+                            <div
+                                style="
+                                    font-size: 11px;
+                                    color: var(--muted);
+                                    margin-bottom: 8px;
+                                    font-weight: 600;
+                                    letter-spacing: 0.05em;
+                                    text-transform: uppercase;
+                                "
+                            >
+                                Other names that were in the running
+                            </div>
+                            <div class="hiw-chips">
+                                <span class="hiw-chip">GripeSwipe</span>
+                                <span class="hiw-chip">PainFeed</span>
+                                <span class="hiw-chip">FrustFeed</span>
+                                <span class="hiw-chip">IdeaDrop</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DETAIL MODAL -->
+            <div
+                id="detailModal"
+                class="modal-overlay"
+                onclick="handleModalClick(event)"
+            >
+                <div class="modal-box" id="detailBox"></div>
+            </div>
+
+            <!-- BOTTOM NAV -->
+            <nav class="bottom-nav">
+                <button
+                    id="nav-feed"
+                    class="nav-btn active"
+                    onclick="routerGo('/feed')"
+                >
+                    <div class="nav-lines">
+                        <div class="nl nl-full"></div>
+                        <div class="nl nl-full"></div>
+                        <div class="nl nl-short"></div>
+                    </div>
+                    Feed
+                </button>
+                <button
+                    id="nav-connected"
+                    class="nav-btn"
+                    onclick="routerGo('/build-list')"
+                >
+                    <div class="nav-lines">
+                        <div class="nl nl-short"></div>
+                        <div class="nl nl-full"></div>
+                        <div class="nl nl-short"></div>
+                    </div>
+                    Build List
+                </button>
+                <button
+                    id="nav-howitworks"
+                    class="nav-btn"
+                    onclick="routerGo('/how-it-works')"
+                >
+                    <div class="nav-lines">
+                        <div class="nl nl-full"></div>
+                        <div class="nl nl-mid"></div>
+                        <div class="nl nl-full"></div>
+                    </div>
+                    How It Works
+                </button>
+            </nav>
+        </div>
+
+        <script>
+            // ── DATA ──
+            const IDEAS = [
+                {
+                    id: 1,
+                    subs: ["r/freelance", "r/digitalnomad", "r/webdev"],
+                    postsFound: 847,
+                    sampleUpvotes: 847,
+                    sampleComments: 203,
+                    samplePost:
+                        "Just spent 3 hours this week sending awkward reminder emails for invoices 30 days overdue. My clients are great but I feel terrible asking for my own money. There has to be a better way.",
+                    title: "Freelancers hate chasing invoices",
+                    summary:
+                        "Lose hours every week on awkward payment reminders. Every existing tool costs $50/mo or sends robotic emails that feel passive-aggressive.",
+                    problem:
+                        "Late payments hurt freelance cash flow. The social awkwardness of asking for money makes freelancers wait too long, which makes it worse. FreshBooks costs $50/mo and is overkill for a solo freelancer. Most just send a manual email and feel bad about it.",
+                    targetUser:
+                        "Solo freelancers earning $2k–$15k/month — mostly designers, developers, copywriters. Typically 1-2 years in, past the beginner stage.",
+                    solution:
+                        "A focused tool that auto-sends warm, personalized follow-up emails at day 7, day 14, and day 30 after invoice due date. Tone picker: friendly / firm / final notice. Sends from your own email. One-time setup per client. Nothing else.",
+                    monetization:
+                        "$9/mo flat. 60k+ freelancers on r/freelance alone. At 1% conversion that's $5,400 MRR from one subreddit. Upsell: contract templates at $19/mo.",
+                    competitors:
+                        "FreshBooks ($50/mo, overkill), Wave (free but no follow-up automation), HoneyBook ($39/mo, full CRM — too much).",
+                    scores: {
+                        marketSize: 22,
+                        painIntensity: 23,
+                        solutionGap: 20,
+                        monetization: 19,
+                    },
+                    total: 84,
+                    verdictType: "build",
+                    verdictLabel: "Build it",
+                },
+                {
+                    id: 2,
+                    subs: ["r/ADHD", "r/productivity", "r/selfimprovement"],
+                    postsFound: 1240,
+                    sampleUpvotes: 1240,
+                    sampleComments: 412,
+                    samplePost:
+                        "I have 47 browser tabs open right now. 23 of them are articles I need to read later. I know I will never read them. Why can I not just close them.",
+                    title: "People can't manage their 'read later' pile",
+                    summary:
+                        "Pocket has 40M users. Most never open saved articles again. The save behavior is compulsive. The reading never happens.",
+                    problem:
+                        "Saving content feels productive. Reading it doesn't happen. Pocket and Instapaper solved saving. Nobody solved the follow-through. The guilt of an unread list makes people save less over time.",
+                    targetUser:
+                        "Knowledge workers aged 25-40, particularly those with ADHD. Saves 5-15 articles a week. Opens their read-later list maybe once a month.",
+                    solution:
+                        "A read-later app that surfaces one article per day based on what you've actually finished reading. No list. No queue. One card, chosen for you, at a time you pick.",
+                    monetization:
+                        "$5/mo consumer. Potential B2B angle: corporate learning platforms licensing the daily delivery model. 40M Pocket users is the addressable market.",
+                    competitors:
+                        "Pocket (40M users, no delivery model), Instapaper (acquired, stagnant), Matter (newsletter-focused).",
+                    scores: {
+                        marketSize: 24,
+                        painIntensity: 21,
+                        solutionGap: 18,
+                        monetization: 15,
+                    },
+                    total: 78,
+                    verdictType: "build",
+                    verdictLabel: "Build it",
+                },
+                {
+                    id: 3,
+                    subs: ["r/smallbusiness", "r/entrepreneur", "r/marketing"],
+                    postsFound: 312,
+                    sampleUpvotes: 312,
+                    sampleComments: 67,
+                    samplePost:
+                        "I run a 3-person agency. Clients ask for reports every month. I spend 6 hours building the same PowerPoint. Tools exist but none of them connect to everything I use.",
+                    title: "Agency reporting is still mostly manual",
+                    summary:
+                        "Small agencies spend 5-8 hours a month building client reports by hand. The tools exist but they don't talk to each other, so someone still exports CSVs.",
+                    problem:
+                        "Reporting is grunt work that falls on whoever is most technical. Data lives in GA4, Meta Ads, and Ahrefs. Getting it into one coherent PDF takes half a day. Every month.",
+                    targetUser:
+                        "Agencies with 2-10 people billing $3k–$20k/month per client. Usually the founder or ops person handles reporting.",
+                    solution:
+                        "Connect the 5 most-used agency tools (GA4, Meta Ads, Google Ads, Ahrefs, Mailchimp). Generate a client-branded PDF in 2 clicks. Scheduled monthly.",
+                    monetization:
+                        "$49/mo per agency. Crowded space but nobody owns the small-agency tier below $100/mo.",
+                    competitors:
+                        "AgencyAnalytics ($12/client/mo), Databox ($88/mo), Looker Studio (free but steep learning curve).",
+                    scores: {
+                        marketSize: 15,
+                        painIntensity: 17,
+                        solutionGap: 14,
+                        monetization: 18,
+                    },
+                    total: 64,
+                    verdictType: "maybe",
+                    verdictLabel: "Validate first",
+                },
+                {
+                    id: 4,
+                    subs: ["r/sysadmin", "r/devops", "r/aws"],
+                    postsFound: 198,
+                    sampleUpvotes: 198,
+                    sampleComments: 89,
+                    samplePost:
+                        "Every month I get a surprise AWS bill. I set up billing alerts. They're set wrong. I forget. Then $400 disappears and I have to explain it to my boss.",
+                    title: "Cloud billing surprises are still a thing",
+                    summary:
+                        "AWS billing is genuinely confusing. Even experienced engineers get hit. The tools for this are all enterprise-priced or require DevOps setup to configure.",
+                    problem:
+                        "Cloud costs are opaque. AWS has 200+ services with different pricing models. Setting up alerts correctly requires understanding what you're looking for. Most teams configure them after the first bad month.",
+                    targetUser:
+                        "Solo devs and small teams (2-10 engineers) running AWS, GCP, or Azure. Spending $200–$2k/month. No dedicated DevOps.",
+                    solution:
+                        "Connect once with a read-only IAM role. Get a plain-English breakdown of what's costing what. One alert when anything spikes more than 20%.",
+                    monetization:
+                        "$19/mo solo, $49/mo team. Finance teams hate surprise cloud bills as much as engineers do — that's your B2B angle.",
+                    competitors:
+                        "CloudHealth (enterprise-only), Spot.io (complex), AWS Cost Explorer (built-in but terrible UX).",
+                    scores: {
+                        marketSize: 14,
+                        painIntensity: 16,
+                        solutionGap: 15,
+                        monetization: 17,
+                    },
+                    total: 62,
+                    verdictType: "maybe",
+                    verdictLabel: "Validate first",
+                },
+                {
+                    id: 5,
+                    subs: [
+                        "r/webdev",
+                        "r/learnprogramming",
+                        "r/cscareerquestions",
+                    ],
+                    postsFound: 445,
+                    sampleUpvotes: 445,
+                    sampleComments: 178,
+                    samplePost:
+                        "I made a portfolio website. I have been working on it for 3 months. I have not sent it to anyone. I keep changing things.",
+                    title: "Dev portfolios nobody looks at",
+                    summary:
+                        "Millions of developers build portfolio sites. The problem isn't the portfolio — hiring managers don't look at them anyway.",
+                    problem:
+                        "Developers spend 50-100 hours building portfolios. Hiring managers spend 30 seconds on them. The portfolio itself isn't the bottleneck. It's the rest of the job search process.",
+                    targetUser:
+                        "Junior to mid-level developers, 1-3 YOE, actively job searching.",
+                    solution:
+                        "Unclear. The frustration is real but the solution isn't obviously a SaaS product. Could be coaching, portfolio reviews, or job application tooling. The pain point is job searching — not portfolio building.",
+                    monetization:
+                        "Weak. Developers don't pay well for job search tools. This space is full of free tools and free advice. Don't target people who don't pay.",
+                    competitors:
+                        "LinkedIn, GitHub, every portfolio builder ever made.",
+                    scores: {
+                        marketSize: 18,
+                        painIntensity: 11,
+                        solutionGap: 8,
+                        monetization: 7,
+                    },
+                    total: 44,
+                    verdictType: "skip",
+                    verdictLabel: "Hard pass",
+                },
+            ];
+
+            // ── STATE ──
+            let connected = [];
+            let dismissed = new Set();
+            let chartInst = null;
+
+            // ── HELPERS ──
+            function scoreColor(t) {
+                return t >= 75
+                    ? "var(--green)"
+                    : t >= 50
+                      ? "var(--yellow)"
+                      : "var(--red)";
+            }
+            function verdictClass(type) {
+                return type === "build"
+                    ? "v-build"
+                    : type === "maybe"
+                      ? "v-maybe"
+                      : "v-skip";
+            }
+
+            // ── RENDER FEED ──
+            function renderFeed() {
+                const stack = document.getElementById("cardStack");
+                const empty = document.getElementById("emptyState");
+                const visible = IDEAS.filter((i) => !dismissed.has(i.id));
+                if (!visible.length) {
+                    stack.innerHTML = "";
+                    empty.classList.add("show");
+                    return;
+                }
+                empty.classList.remove("show");
+                const pct = (v) => Math.round((v / 25) * 100);
+                stack.innerHTML = visible
+                    .map((idea, idx) => {
+                        const sc = scoreColor(idea.total);
+                        const vc = verdictClass(idea.verdictType);
+                        const bars = [
+                            ["Market Size", "marketSize"],
+                            ["Pain Intensity", "painIntensity"],
+                            ["Solution Gap", "solutionGap"],
+                            ["Monetization", "monetization"],
+                        ];
+                        return `
+      <div class="card anim" id="card-${idea.id}" style="animation-delay:${idx * 0.06}s">
+        <div class="card-source">
+          <div class="card-dot"></div>
+          <span class="card-subs">${idea.subs.join(" · ")}</span>
+          <span class="card-count">${idea.postsFound.toLocaleString()} posts</span>
+        </div>
+        <div class="card-body" onclick="openDetail(${idea.id})">
+          <div class="card-title">${idea.title}</div>
+          <div class="card-summary">${idea.summary}</div>
+          <div class="score-row">
+            <div class="score-ring" style="border-color:${sc}">
+              <span class="score-num" style="color:${sc}">${idea.total}</span>
+            </div>
+            <div class="score-right">
+              <span class="verdict ${vc}"><span class="v-dot"></span>${idea.verdictLabel}</span>
+              <div class="mini-bars">
+                ${bars
+                    .map(
+                        ([label, key]) => `
+                  <div class="mbar-row">
+                    <span class="mbar-label">${label}</span>
+                    <div class="mbar-track"><div class="mbar-fill" style="width:${pct(idea.scores[key])}%"></div></div>
+                    <span class="mbar-val">${idea.scores[key]}</span>
+                  </div>`,
+                    )
+                    .join("")}
+              </div>
+            </div>
+          </div>
+          <div class="reddit-sample">
+            <p>"${idea.samplePost}"</p>
+            <div class="reddit-meta">
+              <span>↑ ${idea.sampleUpvotes.toLocaleString()}</span>
+              <span>${idea.sampleComments} comments</span>
+            </div>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="act-btn act-bail" onclick="swipe(${idea.id},'bail')">Bail</button>
+          <button class="act-btn act-build" onclick="swipe(${idea.id},'build')">Build</button>
+        </div>
+      </div>`;
+                    })
+                    .join("");
+            }
+
+            // ── SWIPE ──
+            function swipe(id, action) {
+                const el = document.getElementById(`card-${id}`);
+                if (!el) return;
+                el.classList.add(action);
+                if (action === "build") {
+                    const idea = IDEAS.find((i) => i.id === id);
+                    if (idea && !connected.find((i) => i.id === id))
+                        connected.push(idea);
+                    toast("Added to Build List");
+                } else {
+                    toast("Passed");
+                }
+                dismissed.add(id);
+                setTimeout(() => {
+                    el.remove();
+                    checkEmpty();
+                }, 320);
+            }
+            function checkEmpty() {
+                if (!IDEAS.filter((i) => !dismissed.has(i.id)).length)
+                    document.getElementById("emptyState").classList.add("show");
+            }
+            function resetFeed() {
+                dismissed.clear();
+                connected = [];
+                document.getElementById("emptyState").classList.remove("show");
+                renderFeed();
+            }
+
+            // ── NAVIGATION ──
+            function navigate(page) {
+                document
+                    .querySelectorAll(".page")
+                    .forEach((p) => p.classList.remove("active"));
+                document
+                    .querySelectorAll(".nav-btn")
+                    .forEach((b) => b.classList.remove("active"));
+                document.getElementById(`page-${page}`).classList.add("active");
+                const nb = document.getElementById(`nav-${page}`);
+                if (nb) nb.classList.add("active");
+                if (page === "connected") renderConnected();
+            }
+
+            // ── ROUTER ──
+            const routes = {
+                '/': 'feed',
+                '/feed': 'feed',
+                '/build-list': 'connected',
+                '/how-it-works': 'howitworks'
+            };
+            function handleRoute() {
+                const hash = window.location.hash.slice(1) || '/';
+                const page = routes[hash] || 'feed';
+                navigate(page);
+            }
+            function routerGo(path) {
+                window.location.hash = path;
+            }
+            window.addEventListener('hashchange', handleRoute);
+            window.addEventListener('load', handleRoute);
+
+            // ── DETAIL MODAL ──
+            function openDetail(id) {
+                const idea = IDEAS.find((i) => i.id === id);
+                if (!idea) return;
+                const sc = scoreColor(idea.total);
+                const vc = verdictClass(idea.verdictType);
+                document.getElementById("detailBox").innerHTML = `
+    <div class="modal-header">
+      <div class="modal-title">${idea.title}</div>
+      <button class="modal-close" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+        <div class="score-ring" style="border-color:${sc};width:64px;height:64px;border-width:3px;">
+          <span class="score-num" style="color:${sc};font-size:22px;">${idea.total}</span>
+          <span style="font-size:9px;color:var(--muted);">/100</span>
+        </div>
+        <div>
+          <span class="verdict ${vc}" style="font-size:12px;padding:4px 12px;margin-bottom:6px;display:inline-flex;">${idea.verdictLabel}</span>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;">${idea.postsFound.toLocaleString()} posts analyzed</div>
+          <div style="font-size:11px;color:var(--muted);">${idea.subs.join(" · ")}</div>
+        </div>
+      </div>
+      <div class="m-section">
+        <div class="m-label">Score breakdown</div>
+        <div style="background:var(--bg);border-radius:10px;padding:12px 12px 6px;">
+          <canvas id="detailChart" height="140"></canvas>
+        </div>
+      </div>
+      <div class="m-section"><div class="m-label">The Problem</div><div class="m-box">${idea.problem}</div></div>
+      <div class="m-section"><div class="m-label">Who Has It</div><div class="m-box">${idea.targetUser}</div></div>
+      <div class="m-section"><div class="m-label">Possible Solution</div><div class="m-box">${idea.solution}</div></div>
+      <div class="m-section"><div class="m-label">Can You Charge for It</div><div class="m-box">${idea.monetization}</div></div>
+      <div class="m-section"><div class="m-label">What Already Exists</div><div class="m-box">${idea.competitors}</div></div>
+      <div class="m-section">
+        <div class="m-label">From Reddit</div>
+        <div class="m-box" style="font-style:italic;">"${idea.samplePost}"
+          <div style="margin-top:8px;display:flex;gap:10px;">
+            <span style="font-size:11px;color:var(--muted);font-style:normal;">↑ ${idea.sampleUpvotes.toLocaleString()}</span>
+            <span style="font-size:11px;color:var(--muted);font-style:normal;">${idea.sampleComments} comments</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button onclick="swipe(${idea.id},'bail');closeDetail();" style="flex:1;padding:13px;background:var(--bg);border:1px solid var(--border-s);border-radius:12px;color:var(--muted);font-weight:600;cursor:pointer;font-family:inherit;font-size:14px;">Bail</button>
+      <button onclick="swipe(${idea.id},'build');closeDetail();" style="flex:1;padding:13px;background:var(--accent);border:none;border-radius:12px;color:#fff;font-weight:600;cursor:pointer;font-family:inherit;font-size:14px;">Build</button>
+    </div>`;
+                document.getElementById("detailModal").style.display = "flex";
+                setTimeout(() => {
+                    if (chartInst) {
+                        chartInst.destroy();
+                        chartInst = null;
+                    }
+                    const ctx = document.getElementById("detailChart");
+                    if (!ctx) return;
+                    chartInst = new Chart(ctx, {
+                        type: "bar",
+                        data: {
+                            labels: [
+                                "Market Size",
+                                "Pain Intensity",
+                                "Solution Gap",
+                                "Monetization",
+                            ],
+                            datasets: [
+                                {
+                                    data: [
+                                        idea.scores.marketSize,
+                                        idea.scores.painIntensity,
+                                        idea.scores.solutionGap,
+                                        idea.scores.monetization,
+                                    ],
+                                    backgroundColor: "#FF4500",
+                                    borderRadius: 6,
+                                    borderSkipped: false,
+                                },
+                            ],
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        label: (c) => c.raw + " / 25",
+                                    },
+                                },
+                            },
+                            scales: {
+                                y: {
+                                    max: 25,
+                                    grid: { color: "#E5E5EA" },
+                                    ticks: { color: "#8E8E93", stepSize: 5 },
+                                    border: { display: false },
+                                },
+                                x: {
+                                    grid: { display: false },
+                                    ticks: {
+                                        color: "#8E8E93",
+                                        font: { size: 10 },
+                                    },
+                                    border: { display: false },
+                                },
+                            },
+                        },
+                    });
+                }, 60);
+            }
+            function closeDetail() {
+                document.getElementById("detailModal").style.display = "none";
+                if (chartInst) {
+                    chartInst.destroy();
+                    chartInst = null;
+                }
+            }
+            function handleModalClick(e) {
+                if (e.target === document.getElementById("detailModal"))
+                    closeDetail();
+            }
+
+            // ── CONNECTED ──
+            function renderConnected() {
+                const list = document.getElementById("connectedList");
+                const empty = document.getElementById("connectedEmpty");
+                if (!connected.length) {
+                    list.innerHTML = "";
+                    empty.style.display = "block";
+                    return;
+                }
+                empty.style.display = "none";
+                list.innerHTML = connected
+                    .map((idea) => {
+                        const sc = scoreColor(idea.total);
+                        const vc = verdictClass(idea.verdictType);
+                        return `
+      <div class="connected-item" onclick="openDetail(${idea.id})">
+        <div class="score-ring" style="border-color:${sc};width:44px;height:44px;">
+          <span class="score-num" style="color:${sc};font-size:14px;">${idea.total}</span>
+        </div>
+        <div class="ci-info">
+          <div class="ci-title">${idea.title}</div>
+          <span class="verdict ${vc}" style="font-size:10px;">${idea.verdictLabel}</span>
+        </div>
+        <span class="ci-chevron">›</span>
+      </div>`;
+                    })
+                    .join("");
+            }
+
+            // ── TOAST ──
+            function toast(msg) {
+                const el = document.createElement("div");
+                el.className = "toast";
+                el.textContent = msg;
+                document.body.appendChild(el);
+                setTimeout(() => {
+                    el.style.transition = "opacity 0.2s";
+                    el.style.opacity = "0";
+                    setTimeout(() => el.remove(), 200);
+                }, 1800);
+            }
+
+            // ── INIT ──
+            renderFeed();
+        </script>
+    </body>
+</html>
