@@ -36,8 +36,8 @@ go run .
 | Provider | Env Var | Default Model |
 |----------|---------|---------------|
 | OpenRouter (default) | `OPENROUTER_API_KEY` | `deepseek/deepseek-chat-v3-0324:free` |
-| Google AI Studio | `GOOGLE_AI_API_KEY` | `gemini-3-flash-preview` |
-| Vertex AI | `VERTEX_PROJECT_ID` + `gcloud auth login` | `gemini-3-flash-preview` |
+| Google AI Studio | `GOOGLE_AI_API_KEY` | `gemini-3.1-flash-lite` |
+| Vertex AI | `VERTEX_PROJECT_ID` + `gcloud auth login` | `gemini-3.1-flash-lite` |
 
 Override per-request: `GET /api/ideas?q=frustrated&provider=google`
 

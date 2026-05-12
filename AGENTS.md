@@ -129,7 +129,7 @@ When `q` is empty, runs 3 queries in batch:
 
 - Reddit Search API - no key - `reddit.com/search.json` (top/week)
 - OpenRouter - `OPENROUTER_API_KEY` - chat completions, default model: `deepseek/deepseek-chat-v3-0324:free`
-- Google AI Studio - `GOOGLE_AI_API_KEY` - generateContent, default model: `gemini-3-flash-preview`
+- Google AI Studio - `GOOGLE_AI_API_KEY` - generateContent, default model: `gemini-3.1-flash-lite`
 - Google Vertex AI - `VERTEX_PROJECT_ID`, `VERTEX_REGION` (default: `us-central1`) - requires `gcloud auth login`
 - Turso SQLite - `TURSO_DB_URL`, `TURSO_AUTH_TOKEN` - persists saved ideas via REST API
 

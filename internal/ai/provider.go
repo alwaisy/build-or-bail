@@ -14,13 +14,13 @@ func CallLLMDispatch(posts []core.RedditPost, provider string) ([]core.Idea, err
 		if apiKey == "" {
 			return nil, fmt.Errorf("GOOGLE_AI_API_KEY not set. Add it to .env")
 		}
-		model := core.EnvOr("GOOGLE_MODEL", "gemini-3-flash-preview")
+		model := core.EnvOr("GOOGLE_MODEL", "gemini-3.1-flash-lite")
 		log.Printf("  calling Google AI (model=%s) with %d posts", model, len(posts))
 		return callGoogle(apiKey, model, posts)
 	case "vertex":
 		projectID := os.Getenv("VERTEX_PROJECT_ID")
 		region := core.EnvOr("VERTEX_REGION", "us-central1")
-		model := core.EnvOr("GOOGLE_MODEL", "gemini-3-flash-preview")
+		model := core.EnvOr("GOOGLE_MODEL", "gemini-3.1-flash-lite")
 		log.Printf("  calling Vertex AI (project=%s, region=%s) with %d posts", projectID, region, len(posts))
 		return callVertex(projectID, region, model, posts)
 	default:
