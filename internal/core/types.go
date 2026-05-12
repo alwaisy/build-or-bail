@@ -37,10 +37,15 @@ type IdeaScores struct {
 }
 
 type IdeasResponse struct {
-	Ideas     []Idea `json:"ideas"`
-	Query     string `json:"query"`
-	FetchedAt string `json:"fetchedAt"`
-	Source    string `json:"source"`
+	Ideas        []Idea   `json:"ideas"`
+	Query        string   `json:"query"`
+	FetchedAt    string   `json:"fetchedAt"`
+	Source       string   `json:"source"`
+	BatchNum     int      `json:"batchNum"`
+	TotalBatches int      `json:"totalBatches"`
+	HasMore      bool     `json:"hasMore"`
+	Cursors      []string `json:"cursors"`
+	PostIds      []string `json:"postIds"`
 }
 
 type RedditPost struct {

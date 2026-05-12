@@ -101,9 +101,13 @@ async function fetchConfig() {
     return APP_CONFIG;
 }
 
-async function fetchIdeas(query) {
+async function fetchIdeas(query, cursors, seenIds, batchNum, totalBatches) {
     const params = new URLSearchParams();
     if (query) params.set("q", query);
+    if (cursors && cursors.length) params.set("cursors", cursors.join(","));
+    if (seenIds && seenIds.size) params.set("seen", [...seenIds].join(","));
+    if (batchNum !== undefined) params.set("batchNum", batchNum);
+    if (totalBatches !== undefined) params.set("totalBatches", totalBatches);
 
     const res = await fetch("/api/ideas?" + params.toString(), {
         headers: authHeaders(),
@@ -177,6 +181,8 @@ function loadMock() {
 
 const IDEA_INDEX_DB_NAME = "buildorbail";
 const IDEA_INDEX_STORE = "idea_threads";
+const BATCHES_STORE = "idea_batches";
+const SEEN_POSTS_STORE = "seen_post_ids";
 
 function ideaThreadKey(idea) {
     const link = (idea?.sampleLink || "").trim();
@@ -188,11 +194,17 @@ function ideaThreadKey(idea) {
 
 function openIdeaIndexDb() {
     return new Promise((resolve, reject) => {
-        const req = indexedDB.open(IDEA_INDEX_DB_NAME, 1);
+        const req = indexedDB.open(IDEA_INDEX_DB_NAME, 2);
         req.onupgradeneeded = () => {
             const db = req.result;
             if (!db.objectStoreNames.contains(IDEA_INDEX_STORE)) {
                 db.createObjectStore(IDEA_INDEX_STORE, { keyPath: "threadKey" });
+            }
+            if (!db.objectStoreNames.contains(BATCHES_STORE)) {
+                db.createObjectStore(BATCHES_STORE, { keyPath: "batchNum" });
+            }
+            if (!db.objectStoreNames.contains(SEEN_POSTS_STORE)) {
+                db.createObjectStore(SEEN_POSTS_STORE);
             }
         };
         req.onsuccess = () => resolve(req.result);
@@ -235,5 +247,101 @@ async function markIdeasSeen(ideas) {
             db.close();
             reject(tx.error);
         };
+    });
+}
+
+// ── BATCH PERSISTENCE ──────────────────────────────────────
+
+async function saveBatch(batchNum, batchData) {
+    const db = await openIdeaIndexDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(BATCHES_STORE, "readwrite");
+        const store = tx.objectStore(BATCHES_STORE);
+        store.put({
+            batchNum,
+            ideas: batchData.ideas,
+            cursors: batchData.cursors || [],
+            postIds: batchData.postIds || [],
+            hasMore: batchData.hasMore || false,
+            totalBatches: batchData.totalBatches || batchNum,
+            savedAt: new Date().toISOString(),
+        });
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+}
+
+async function loadBatch(batchNum) {
+    const db = await openIdeaIndexDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(BATCHES_STORE, "readonly");
+        const store = tx.objectStore(BATCHES_STORE);
+        const req = store.get(batchNum);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+        tx.oncomplete = () => db.close();
+    });
+}
+
+async function getAllBatchNums() {
+    const db = await openIdeaIndexDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(BATCHES_STORE, "readonly");
+        const store = tx.objectStore(BATCHES_STORE);
+        const req = store.getAllKeys();
+        req.onsuccess = () => resolve((req.result || []).sort((a, b) => a - b));
+        req.onerror = () => reject(req.error);
+        tx.oncomplete = () => db.close();
+    });
+}
+
+async function loadLastBatchState() {
+    const nums = await getAllBatchNums();
+    if (!nums.length) return { batchNums: [], lastNum: 0, totalBatches: 0 };
+    const last = await loadBatch(nums[nums.length - 1]);
+    return {
+        batchNums: nums,
+        lastNum: last ? last.batchNum : 0,
+        totalBatches: last ? last.totalBatches : 0,
+    };
+}
+
+// ── SEEN POST IDs ──────────────────────────────────────
+
+async function addSeenPostIds(postIds) {
+    if (!postIds || !postIds.length) return;
+    const db = await openIdeaIndexDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(SEEN_POSTS_STORE, "readwrite");
+        const store = tx.objectStore(SEEN_POSTS_STORE);
+        const now = new Date().toISOString();
+        postIds.forEach((id) => {
+            store.put({ seenAt: now }, id);
+        });
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+}
+
+async function getAllSeenPostIds() {
+    const db = await openIdeaIndexDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(SEEN_POSTS_STORE, "readonly");
+        const store = tx.objectStore(SEEN_POSTS_STORE);
+        const req = store.getAllKeys();
+        req.onsuccess = () => resolve(new Set((req.result || []).map(String)));
+        req.onerror = () => reject(req.error);
+        tx.oncomplete = () => db.close();
+    });
+}
+
+async function clearBatchData() {
+    const db = await openIdeaIndexDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction([BATCHES_STORE, SEEN_POSTS_STORE], "readwrite");
+        tx.objectStore(BATCHES_STORE).clear();
+        tx.objectStore(SEEN_POSTS_STORE).clear();
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
     });
 }

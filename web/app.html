@@ -1130,6 +1130,61 @@
                         </div>
                     </div>
                 </div>
+                <!-- Batch Navigation -->
+                <div
+                    id="batchNav"
+                    style="display: none; padding: 8px 16px 4px; align-items: center; justify-content: center; gap: 12px;"
+                >
+                    <button
+                        onclick="batchPrev()"
+                        id="btn-batch-prev"
+                        style="
+                            width: 36px;
+                            height: 36px;
+                            border-radius: 50%;
+                            background: var(--surface);
+                            border: 0.5px solid var(--border);
+                            color: var(--text);
+                            font-size: 16px;
+                            cursor: pointer;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-family: inherit;
+                            transition: opacity 0.12s;
+                        "
+                    >‹</button>
+                    <div
+                        id="batch-label"
+                        style="
+                            font-size: 13px;
+                            font-weight: 600;
+                            color: var(--text);
+                            min-width: 80px;
+                            text-align: center;
+                            letter-spacing: -0.2px;
+                        "
+                    >Batch 1</div>
+                    <button
+                        onclick="batchNext()"
+                        id="btn-batch-next"
+                        style="
+                            width: 36px;
+                            height: 36px;
+                            border-radius: 50%;
+                            background: var(--accent);
+                            border: none;
+                            color: #fff;
+                            font-size: 16px;
+                            cursor: pointer;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-family: inherit;
+                            transition: opacity 0.12s;
+                        "
+                    >›</button>
+                </div>
                 <div id="cardStack"></div>
                 <div class="empty" id="emptyState">
                     <div class="empty-title">That's the stack.</div>
@@ -1138,9 +1193,14 @@
                         on from the rest, and come back tomorrow for a fresh
                         batch.
                     </div>
-                    <button class="empty-btn" onclick="resetFeed()">
-                        Reset stack
-                    </button>
+                    <div style="display: flex; gap: 8px; justify-content: center;">
+                        <button class="empty-btn" id="empty-batch-btn" onclick="handleFetchMore()" style="display:none; background: var(--accent);">
+                            Generate next batch
+                        </button>
+                        <button class="empty-btn" onclick="resetFeed()">
+                            Reset stack
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -1452,6 +1512,15 @@
             let currentIdeas = [];
             let authUserEmail = "";
 
+            // Batch state
+            let batchState = {
+                current: 0,
+                total: 0,
+                hasMore: false,
+                cursors: [],
+                allSeenPostIds: new Set(),
+            };
+
             // ── HELPERS ──
             function scoreColor(t) {
                 return t >= 75
@@ -1601,18 +1670,154 @@
                 if (!currentIdeas.filter((i) => !dismissed.has(i.id)).length)
                     document.getElementById("emptyState").classList.add("show");
             }
-            function resetFeed() {
+            async function resetFeed() {
                 dismissed.clear();
                 connected = [];
                 currentIdeas = [];
+                batchState = { current: 0, total: 0, hasMore: false, cursors: [], allSeenPostIds: new Set() };
                 document.getElementById("emptyState").classList.remove("show");
                 document.getElementById("feed-status-text").textContent =
                     hasAuthSession()
                         ? "Signed in as " + authUserEmail
                         : "Sign in to pull ideas";
                 document.getElementById("mock-pill").style.display = "none";
+                document.getElementById("batchNav").style.display = "none";
+                try { await clearBatchData(); } catch(_) {}
                 renderFeed();
                 updateAuthUI();
+            }
+
+            // ── BATCH NAVIGATION ──
+            async function batchPrev() {
+                if (batchState.current <= 1) return;
+                const prev = batchState.current - 1;
+                const data = await loadBatch(prev);
+                if (!data) return;
+                batchState.current = prev;
+                currentIdeas = data.ideas || [];
+                dismissed.clear();
+                renderFeed();
+                updateBatchNav();
+            }
+
+            async function batchNext() {
+                // If next batch doesn't exist, try to generate it
+                const nextNum = batchState.current + 1;
+                if (nextNum <= batchState.total) {
+                    const data = await loadBatch(nextNum);
+                    if (data) {
+                        batchState.current = nextNum;
+                        currentIdeas = data.ideas || [];
+                        dismissed.clear();
+                        renderFeed();
+                        updateBatchNav();
+                        return;
+                    }
+                }
+                // No existing batch - generate next batch
+                if (!batchState.hasMore) return;
+                await handleFetchMore();
+            }
+
+            async function handleFetchMore() {
+                const btn = document.getElementById("btn-fetch");
+                const loading = document.getElementById("feed-loading");
+                const status = document.getElementById("feed-status-text");
+
+                btn.disabled = true;
+                btn.textContent = "Pulling...";
+                loading.style.display = "block";
+                startLoadingMessages();
+
+                const nextBatchNum = batchState.current + 1;
+
+                try {
+                    const res = await fetchIdeas("", batchState.cursors, batchState.allSeenPostIds, nextBatchNum - 1, batchState.total);
+                    const ideas = res.ideas || [];
+
+                    try {
+                        await saveBatch(res.batchNum, {
+                            ideas,
+                            cursors: res.cursors || [],
+                            postIds: res.postIds || [],
+                            hasMore: res.hasMore || false,
+                            totalBatches: res.totalBatches || res.batchNum,
+                        });
+                        await addSeenPostIds(res.postIds || []);
+                    } catch (dbErr) {
+                        console.warn("IndexedDB save failed, continuing anyway:", dbErr);
+                    }
+                    res.postIds.forEach(id => batchState.allSeenPostIds.add(id));
+
+                    batchState.current = res.batchNum;
+                    batchState.total = res.totalBatches;
+                    batchState.hasMore = res.hasMore;
+                    batchState.cursors = res.cursors || [];
+                    currentIdeas = ideas;
+                    dismissed.clear();
+
+                    loading.style.display = "none";
+                    stopLoadingMessages();
+                    btn.textContent = "Pull ideas";
+                    btn.disabled = false;
+
+                    renderFeed();
+                    updateBatchNav();
+                    status.textContent = batchState.total + " batches generated";
+                } catch (err) {
+                    loading.style.display = "none";
+                    stopLoadingMessages();
+                    btn.textContent = "Pull ideas";
+                    btn.disabled = false;
+                    status.textContent = "Could not generate batch";
+                    console.error("Fetch more failed:", err);
+                    const errTitle = presentErrorType(err.type || "unknown_error");
+                    const errMsg = presentErrorMessage(err.type || "unknown_error", err.message);
+                    toast(errTitle);
+                }
+            }
+
+            function updateBatchNav() {
+                const nav = document.getElementById("batchNav");
+                const label = document.getElementById("batch-label");
+                const prevBtn = document.getElementById("btn-batch-prev");
+                const nextBtn = document.getElementById("btn-batch-next");
+                const emptyBatchBtn = document.getElementById("empty-batch-btn");
+
+                if (batchState.total === 0) {
+                    nav.style.display = "none";
+                    if (emptyBatchBtn) emptyBatchBtn.style.display = "none";
+                    return;
+                }
+
+                nav.style.display = "flex";
+                label.textContent = "Batch " + batchState.current + " / " + batchState.total;
+
+                // Prev button
+                if (batchState.current <= 1) {
+                    prevBtn.style.opacity = "0.3";
+                    prevBtn.style.pointerEvents = "none";
+                } else {
+                    prevBtn.style.opacity = "1";
+                    prevBtn.style.pointerEvents = "auto";
+                }
+
+                // Next button - if next batch exists, just navigate. If not but hasMore, show generate.
+                const hasNext = batchState.current < batchState.total;
+                if (!hasNext && !batchState.hasMore) {
+                    nextBtn.style.opacity = "0.3";
+                    nextBtn.style.pointerEvents = "none";
+                    if (emptyBatchBtn) emptyBatchBtn.style.display = "none";
+                } else {
+                    nextBtn.style.opacity = "1";
+                    nextBtn.style.pointerEvents = "auto";
+                    if (!hasNext && batchState.hasMore && emptyBatchBtn) {
+                        // Show generate button in empty state
+                        emptyBatchBtn.style.display = "inline-flex";
+                    } else if (emptyBatchBtn) {
+                        emptyBatchBtn.style.display = "none";
+                    }
+                }
             }
 
             // ── NAVIGATION ──
@@ -2053,6 +2258,27 @@
                     document.getElementById("mock-pill").style.display = "";
                 }
                 updateAuthUI();
+
+                // Restore batch state from IndexedDB
+                try {
+                    const state = await loadLastBatchState();
+                    if (state.totalBatches > 0) {
+                        batchState.total = state.totalBatches;
+                        batchState.current = state.lastNum;
+                        // Restore seen post IDs
+                        batchState.allSeenPostIds = await getAllSeenPostIds();
+                        // Load last batch
+                        const data = await loadBatch(state.lastNum);
+                        if (data) {
+                            batchState.cursors = data.cursors || [];
+                            batchState.hasMore = data.hasMore || false;
+                            currentIdeas = data.ideas || [];
+                            renderFeed();
+                            updateBatchNav();
+                            document.getElementById("feed-actions").style.display = "none";
+                        }
+                    }
+                } catch (_) {}
             }
 
             async function handleAuthRegister() {
@@ -2125,8 +2351,29 @@
                 connected = [];
 
                 try {
-                    const res = await fetchIdeas();
-                    currentIdeas = res.ideas || [];
+                    const res = await fetchIdeas("", [], batchState.allSeenPostIds, 0, batchState.total);
+                    const ideas = res.ideas || [];
+
+                    // Save batch to IndexedDB (non-blocking - don't fail the flow if DB errors)
+                    try {
+                        await saveBatch(res.batchNum, {
+                            ideas,
+                            cursors: res.cursors || [],
+                            postIds: res.postIds || [],
+                            hasMore: res.hasMore || false,
+                            totalBatches: res.totalBatches || res.batchNum,
+                        });
+                        await addSeenPostIds(res.postIds || []);
+                    } catch (dbErr) {
+                        console.warn("IndexedDB save failed, continuing anyway:", dbErr);
+                    }
+                    res.postIds.forEach(id => batchState.allSeenPostIds.add(id));
+
+                    batchState.current = res.batchNum;
+                    batchState.total = res.totalBatches;
+                    batchState.hasMore = res.hasMore;
+                    batchState.cursors = res.cursors || [];
+                    currentIdeas = ideas;
 
                     loading.style.display = "none";
                     stopLoadingMessages();
@@ -2135,6 +2382,7 @@
                     btn.disabled = false;
 
                     renderFeed();
+                    updateBatchNav();
 
                     const source = (res.source || "live").toLowerCase();
                     const isSample =

@@ -7,6 +7,7 @@ import (
 	"buildorbail/internal/db"
 	"buildorbail/internal/discovery"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -83,7 +84,6 @@ func handleIdeas(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := r.URL.Query().Get("q")
-	// If query is empty, discovery.FetchRedditPosts will automatically run the intent queries.
 
 	// Provider: query param overrides env, default is openrouter
 	provider := r.URL.Query().Get("provider")
@@ -91,9 +91,49 @@ func handleIdeas(w http.ResponseWriter, r *http.Request) {
 		provider = core.EnvOr("LLM_PROVIDER", "openrouter")
 	}
 
-	log.Printf("→ fetching reddit for: %q (provider=%s)", query, provider)
+	// Pagination: cursors and batch info
+	cursorsStr := r.URL.Query().Get("cursors")
+	batchNum := 0
+	if bn := r.URL.Query().Get("batchNum"); bn != "" {
+		fmt.Sscanf(bn, "%d", &batchNum)
+	}
+	totalBatches := 0
+	if tb := r.URL.Query().Get("totalBatches"); tb != "" {
+		fmt.Sscanf(tb, "%d", &totalBatches)
+	}
 
-	posts, err := discovery.FetchRedditPosts(query, 100)
+	var cursors []string
+	if cursorsStr != "" {
+		// cursors is comma-separated after tokens
+		parts := strings.Split(cursorsStr, ",")
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				cursors = append(cursors, p)
+			} else {
+				cursors = append(cursors, "")
+			}
+		}
+	}
+	// Ensure 3 cursor slots for 3 intent queries
+	for len(cursors) < 3 {
+		cursors = append(cursors, "")
+	}
+
+	// seen: comma-separated post IDs already processed
+	seenIDs := make(map[string]bool)
+	if seenStr := r.URL.Query().Get("seen"); seenStr != "" {
+		for _, id := range strings.Split(seenStr, ",") {
+			id = strings.TrimSpace(id)
+			if id != "" {
+				seenIDs[id] = true
+			}
+		}
+	}
+
+	log.Printf("→ fetching reddit for: %q (provider=%s, batch=%d, cursors=%v)", query, provider, batchNum, cursors)
+
+	result, err := discovery.FetchRedditPosts(query, 100, cursors, seenIDs)
 	if err != nil {
 		log.Printf("  reddit error: %v", err)
 		writeJSON(w, http.StatusBadGateway, map[string]string{
@@ -103,9 +143,9 @@ func handleIdeas(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	log.Printf("  got %d posts from reddit", len(posts))
+	log.Printf("  got %d posts from reddit (%d new)", len(result.Posts), len(result.PostIDs))
 
-	if len(posts) == 0 {
+	if len(result.Posts) == 0 {
 		writeJSON(w, http.StatusNotFound, map[string]string{
 			"error":   "no posts found",
 			"type":    "empty_result",
@@ -114,7 +154,7 @@ func handleIdeas(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ideas, err := ai.CallLLMDispatch(posts, provider)
+	ideas, err := ai.CallLLMDispatch(result.Posts, provider)
 	if err != nil {
 		log.Printf("  llm error: %v", err)
 		writeJSON(w, http.StatusBadGateway, map[string]string{
@@ -125,7 +165,7 @@ func handleIdeas(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ideas = core.EnrichIdeasWithRedditData(ideas, posts)
+	ideas = core.EnrichIdeasWithRedditData(ideas, result.Posts)
 	filteredIdeas, skipped, err := db.FilterUndecidedIdeas(user.ID, ideas)
 	if err != nil {
 		log.Printf("  [db warn] decision dedup unavailable, returning all ideas: %v", err)
@@ -144,14 +184,26 @@ func handleIdeas(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := core.IdeasResponse{
-		Ideas:     ideas,
-		Query:     query,
-		FetchedAt: core.CachedNow(),
-		Source:    provider,
+	currentBatch := batchNum + 1
+	if totalBatches > 0 && currentBatch > totalBatches {
+		totalBatches = currentBatch
+	} else if totalBatches == 0 {
+		totalBatches = currentBatch
 	}
 
-	log.Printf("  ← %d ideas from %s", len(ideas), provider)
+	resp := core.IdeasResponse{
+		Ideas:        ideas,
+		Query:        query,
+		FetchedAt:    core.CachedNow(),
+		Source:       provider,
+		BatchNum:     currentBatch,
+		TotalBatches: totalBatches,
+		HasMore:      result.HasMore,
+		Cursors:      result.Cursors,
+		PostIds:      result.PostIDs,
+	}
+
+	log.Printf("  ← %d ideas from %s (batch %d/%d, hasMore=%v)", len(ideas), provider, currentBatch, totalBatches, result.HasMore)
 	writeJSON(w, http.StatusOK, resp)
 }
 
