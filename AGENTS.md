@@ -38,9 +38,9 @@ Go backend that fetches Reddit posts about product frustrations, sends them to a
 
 ## Architecture Overview
 
-**Request flow:** `GET /api/ideas?q=<query>&provider=<provider>` → if empty query, runs 3 intent queries in batch → fetches Reddit posts (top, this week) → filters 10+ upvotes AND 50+ comments, excludes meme/gaming/funny/jokes subreddits → dispatches to configured LLM provider with two-part prompt (system=rules.md, user=base.md) → LLM returns JSON array of scored ideas → ideas enriched with Reddit metadata → response JSON. Frontend then filters already-seen/saved ideas using browser IndexedDB before rendering.
+**Request flow:** `GET /api/ideas?q=<query>&provider=<provider>&cursors=<after>&seen=<postIds>&batchNum=<n>` → if empty query, runs 3 intent queries in batch → fetches Reddit posts with `after` cursor pagination (top, this week, limit 100/query) → filters 10+ upvotes AND 50+ comments, excludes meme/gaming/funny/jokes subreddits, skips already-seen post IDs → dispatches to configured LLM provider with two-part prompt (system=rules.md, user=base.md) → LLM returns JSON array of scored ideas → ideas enriched with Reddit metadata → response JSON with `batchNum`, `totalBatches`, `hasMore`, `cursors`, `postIds`. Frontend persists each batch in IndexedDB and shows `← Batch 1/3 →` navigation.
 
-**Persistence layer:** Turso SQLite via REST API (`TURSO_DB_URL`, `TURSO_AUTH_TOKEN`) stores saved ideas. Browser IndexedDB tracks processed thread keys to avoid showing repeat ideas. No server-side index file.
+**Persistence layer:** Turso SQLite via REST API (`TURSO_DB_URL`, `TURSO_AUTH_TOKEN`) stores saved ideas. Browser IndexedDB has 3 stores: `idea_threads` (dedup by thread key), `idea_batches` (persist generated batches with cursors/postIds), `seen_post_ids` (track all post IDs sent to LLM to avoid re-processing). Batches survive page refresh.
 
 **LLM providers:** `openrouter` (default), `google` (Google AI Studio), `vertex` (Google Cloud Vertex AI). All share prompt templates embedded via `//go:embed`. Provider can be overridden per-request via `?provider=` query param.
 
@@ -69,6 +69,8 @@ Go backend that fetches Reddit posts about product frustrations, sends them to a
 - Mock data in `mock.js` loaded when `SHOW_MOCK=true` in `.env`
 - State via global `APP_CONFIG` object and DOM manipulation
 - iOS-style mobile-first design (max-width 430px shell, -apple-system font)
+- IndexedDB v2 with 3 stores: `idea_threads` (thread dedup), `idea_batches` (batch persistence), `seen_post_ids` (post-level dedup)
+- Batch navigation: `← Batch 1/3 →` UI, prev loads from IndexedDB instantly, next triggers new fetch+LLM if not cached
 
 ### Prompt Architecture
 - `GetSystemPrompt()` returns rules.md content (HOW to speak: no AI buzzwords, no formulaic patterns, em-dashes replaced)
@@ -112,6 +114,17 @@ When `q` is empty, runs 3 queries in batch:
 - Frontend changes tested at `http://localhost:5897/`
 - Prompt changes tested with at least one provider
 
+## API Endpoints
+
+`GET /api/ideas` - Fetch startup ideas
+- `q` (optional): search query. Empty = 3 intent queries
+- `provider` (optional): `openrouter` | `google` | `vertex`
+- `cursors` (optional): comma-separated Reddit `after` tokens, one per query
+- `seen` (optional): comma-separated post IDs already processed (dedup)
+- `batchNum` (optional): current batch number for tracking
+- `totalBatches` (optional): total batches generated so far
+- Returns: `{ ideas, query, fetchedAt, source, batchNum, totalBatches, hasMore, cursors, postIds }`
+
 ## External Services
 
 - Reddit Search API - no key - `reddit.com/search.json` (top/week)
@@ -130,6 +143,11 @@ When `q` is empty, runs 3 queries in batch:
 - Default port is `5897` (synced with `.env`)
 - Provider query param (`?provider=google`) overrides `LLM_PROVIDER` env var per-request
 - Turso DB initialized lazily on first save operation; `InitDB()` runs `CREATE TABLE IF NOT EXISTS` + migrations
+- **Batch pagination**: Reddit `after` cursors are per-query (3 cursors for 3 intent queries). Pass as comma-separated `?cursors=t3_abc,,t3_xyz` (empty slot = first page)
+- **Batch pagination**: `?seen` param filters post IDs already sent to LLM (comma-separated). Backend skips these before dispatching to LLM
+- **Batch pagination**: Response includes `hasMore` (bool) and `cursors` ([]string). Frontend persists these in IndexedDB for "Fetch More" continuation
+- **Batch pagination**: Each batch is a full LLM call (~15-35s). Already-generated batches load instantly from IndexedDB
+- **Batch pagination**: `resetFeed()` clears IndexedDB batch data via `clearBatchData()`. Browser refresh restores last batch from IndexedDB
 
 ## Performance Considerations
 
