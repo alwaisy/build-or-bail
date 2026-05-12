@@ -72,6 +72,11 @@
                 color: var(--accent);
                 font-style: normal;
             }
+            .header-links {
+                display: flex;
+                align-items: center;
+                gap: 18px;
+            }
             .header-link {
                 font-size: 14px;
                 color: var(--accent);
@@ -81,6 +86,69 @@
                 cursor: pointer;
                 font-family: inherit;
                 padding: 4px 0;
+            }
+
+            /* ── BATCH NAV ── */
+            .batch-nav {
+                display: none;
+                padding: 12px 16px 16px;
+                align-items: center;
+                justify-content: center;
+                gap: 10px;
+            }
+            .batch-nav.visible {
+                display: flex;
+            }
+            .batch-pill {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                background: var(--surface);
+                border: 0.5px solid var(--border);
+                border-radius: 20px;
+                padding: 4px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            }
+            .batch-btn {
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                border: none;
+                background: transparent;
+                color: var(--text);
+                font-size: 15px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-family: inherit;
+                transition: background 0.12s;
+            }
+            .batch-btn:hover {
+                background: var(--bg);
+            }
+            .batch-btn.primary {
+                background: var(--accent);
+                color: #fff;
+            }
+            .batch-btn.primary:hover {
+                opacity: 0.9;
+            }
+            .batch-btn:disabled {
+                opacity: 0.35;
+                cursor: default;
+            }
+            .batch-btn:disabled:hover {
+                background: transparent;
+            }
+            .batch-label {
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--text);
+                min-width: 72px;
+                text-align: center;
+                letter-spacing: -0.2px;
+                padding: 0 4px;
             }
 
             /* ── PAGES ── */
@@ -936,9 +1004,14 @@
             <!-- HEADER -->
             <header class="header">
                 <a class="logo" href="#/feed">Build <em>or</em> Bail</a>
-                <button class="header-link" onclick="routerGo('/how-it-works')">
-                    How it works
-                </button>
+                <div class="header-links">
+                    <button class="header-link" onclick="routerGo('/playbook')">
+                        Playbook
+                    </button>
+                    <button class="header-link" onclick="routerGo('/how-it-works')">
+                        How it works
+                    </button>
+                </div>
             </header>
 
             <!-- FEED PAGE -->
@@ -1130,61 +1203,6 @@
                         </div>
                     </div>
                 </div>
-                <!-- Batch Navigation -->
-                <div
-                    id="batchNav"
-                    style="display: none; padding: 8px 16px 4px; align-items: center; justify-content: center; gap: 12px;"
-                >
-                    <button
-                        onclick="batchPrev()"
-                        id="btn-batch-prev"
-                        style="
-                            width: 36px;
-                            height: 36px;
-                            border-radius: 50%;
-                            background: var(--surface);
-                            border: 0.5px solid var(--border);
-                            color: var(--text);
-                            font-size: 16px;
-                            cursor: pointer;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            font-family: inherit;
-                            transition: opacity 0.12s;
-                        "
-                    >‹</button>
-                    <div
-                        id="batch-label"
-                        style="
-                            font-size: 13px;
-                            font-weight: 600;
-                            color: var(--text);
-                            min-width: 80px;
-                            text-align: center;
-                            letter-spacing: -0.2px;
-                        "
-                    >Batch 1</div>
-                    <button
-                        onclick="batchNext()"
-                        id="btn-batch-next"
-                        style="
-                            width: 36px;
-                            height: 36px;
-                            border-radius: 50%;
-                            background: var(--accent);
-                            border: none;
-                            color: #fff;
-                            font-size: 16px;
-                            cursor: pointer;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            font-family: inherit;
-                            transition: opacity 0.12s;
-                        "
-                    >›</button>
-                </div>
                 <div id="cardStack"></div>
                 <div class="empty" id="emptyState">
                     <div class="empty-title">That's the stack.</div>
@@ -1200,6 +1218,15 @@
                         <button class="empty-btn" onclick="resetFeed()">
                             Reset stack
                         </button>
+                    </div>
+                </div>
+
+                <!-- Batch Navigation -->
+                <div id="batchNav" class="batch-nav">
+                    <div class="batch-pill">
+                        <button class="batch-btn" id="btn-batch-prev" onclick="batchPrev()">&#8249;</button>
+                        <div class="batch-label" id="batch-label">Batch 1</div>
+                        <button class="batch-btn primary" id="btn-batch-next" onclick="batchNext()">&#8250;</button>
                     </div>
                 </div>
             </div>
@@ -1240,22 +1267,27 @@
             <div id="page-howitworks" class="page">
                 <div class="page-title">How It Works</div>
                 <div class="page-sub">
-                    We pull Reddit posts, clear out the noise, and turn the
-                    sharp ones into a simple call.
+                    Reddit is full of people complaining about real problems.
+                    We find those complaints, clean them up, and turn each
+                    batch into scored startup ideas. Swipe right to save,
+                    left to skip. Grab more batches when you run dry.
                 </div>
 
                 <div class="hiw-group">
                     <div class="hiw-row">
                         <div class="hiw-step">Step 01</div>
-                        <div class="hiw-title">Search Reddit</div>
+                        <div class="hiw-title">Pull from Reddit</div>
                         <div class="hiw-desc">
-                            No login. No key. Reddit gives us a public search
-                            endpoint, and we use it to look past founder
-                            circles. Real frustration shows up in random
-                            subreddits, not just startup forums.
+                            No account needed. Reddit has a public search API,
+                            and we hit it with three different queries at once.
+                            Each one targets a different flavor of frustration,
+                            so the results don't all look the same.
                         </div>
                         <div class="hiw-code">
-                            reddit.com/search.json?q=frustrated+with&sort=new&limit=100
+                            Query 1: "is there a tool that" / "I'd pay for" ...<br />
+                            Query 2: "I hate having to" / "manually doing" ...<br />
+                            Query 3: "missing feature" / "switched from" ...<br />
+                            → ~300 raw posts per batch
                         </div>
                         <div class="hiw-chips">
                             <span class="hiw-chip">why do I have to</span>
@@ -1275,42 +1307,44 @@
 
                     <div class="hiw-row">
                         <div class="hiw-step">Step 02</div>
-                        <div class="hiw-title">Trim the noise</div>
+                        <div class="hiw-title">Cut the junk</div>
                         <div class="hiw-desc">
-                            Hundreds of posts come in. Most never make the cut.
-                            We keep the ones with some traction, skip memes and
-                            gaming chatter, and group repeats so you do not see
-                            the same gripe ten times.
+                            Most posts are noise. We only keep ones with real
+                            engagement, at least 10 upvotes and 50 comments.
+                            Meme subreddits and gaming threads get dropped.
+                            If you have already seen a post in a previous
+                            batch, we skip it. Every batch is fresh content,
+                            no repeats.
                         </div>
                         <div class="hiw-code" style="line-height: 1.9">
-                            In: 847 posts<br />
-                            After filter: 62<br />
-                            After dedup: 18 unique problems<br />
-                            Served today: 5
+                            Batch 1: 300 posts in → 48 after filter → 12 ideas<br />
+                            Batch 2: 300 posts in → skip 48 seen → 9 ideas<br />
+                            Batch 3: 300 posts in → skip 96 seen → 11 ideas<br />
+                            No post is ever processed twice
                         </div>
                     </div>
 
                     <div class="hiw-row">
                         <div class="hiw-step">Step 03</div>
-                        <div class="hiw-title">
-                            Ask the model to do the hard part
-                        </div>
+                        <div class="hiw-title">Let the LLM do the reading</div>
                         <div class="hiw-desc">
-                            Each problem cluster goes through the model with a
-                            tight prompt. We ask for the problem, who feels it,
-                            what a workable fix looks like, whether anyone would
-                            pay, and what already exists. Loose summaries do not
-                            help.
+                            The filtered posts go to an LLM with a strict
+                            prompt. We ask it to pull out the core problem,
+                            who feels it, what a fix looks like, whether
+                            anyone would actually pay, and what already
+                            exists. Vague answers get rejected. The prompt
+                            forces structure, so every idea comes back in
+                            the same format.
                         </div>
                     </div>
 
                     <div class="hiw-row">
                         <div class="hiw-step">Step 04</div>
-                        <div class="hiw-title">Score it</div>
+                        <div class="hiw-title">Score every idea</div>
                         <div class="hiw-desc">
-                            A score only matters if you can see why it landed
-                            there. We split it across four parts so the number
-                            is easier to trust.
+                            A number means nothing without context. Each idea
+                            gets four scores that add to 100, so you can see
+                            exactly where it is strong and where it falls apart.
                         </div>
                         <div class="score-grid">
                             <div>
@@ -1326,9 +1360,9 @@
                                     >
                                 </div>
                                 <div class="score-item-desc">
-                                    Post frequency, upvotes, cross-subreddit
-                                    appearances. How many people face this, not
-                                    just how loudly one person complained.
+                                    How many people face this. Post frequency,
+                                    upvotes, cross-subreddit spread. One loud
+                                    complaint is not a market.
                                 </div>
                             </div>
                             <div>
@@ -1344,9 +1378,9 @@
                                     >
                                 </div>
                                 <div class="score-item-desc">
-                                    Emotional language, urgency, the same person
-                                    posting about it twice. Chronic pain beats
-                                    acute frustration every time.
+                                    Emotional language, urgency, repeat posts
+                                    from the same person. Chronic pain beats
+                                    a one-time rant every time.
                                 </div>
                             </div>
                             <div>
@@ -1364,8 +1398,8 @@
                                 <div class="score-item-desc">
                                     "Is there a tool for this" posts.
                                     Cobbled-together workarounds in comments.
-                                    Spreadsheets doing the job software should
-                                    do.
+                                    Spreadsheets doing a job that software
+                                    should do.
                                 </div>
                             </div>
                             <div>
@@ -1382,8 +1416,8 @@
                                 </div>
                                 <div class="score-item-desc">
                                     Professional context, mentions of paying for
-                                    alternatives, B2B signals. Don't target
-                                    people who don't pay. They don't pay.
+                                    alternatives, B2B signals. Do not target
+                                    people who do not pay. They do not pay.
                                 </div>
                             </div>
                         </div>
@@ -1411,11 +1445,34 @@
 
                     <div class="hiw-row">
                         <div class="hiw-step">Step 05</div>
-                        <div class="hiw-title">Feed adapts to your picks</div>
+                        <div class="hiw-title">Swipe to decide</div>
                         <div class="hiw-desc">
-                            Build means keep it around. Bail means move on. Over
-                            time the feed follows those calls, so the next batch
-                            feels less random.
+                            Build means you want to keep it. Bail means move
+                            on. Saved ideas go into your list so you can
+                            come back later. Over time, the feed learns
+                            what you tend to save, so later batches feel
+                            less random.
+                        </div>
+                    </div>
+
+                    <div class="hiw-row">
+                        <div class="hiw-step">Step 06</div>
+                        <div class="hiw-title">Grab more batches</div>
+                        <div class="hiw-desc">
+                            One batch is 300 posts across three queries.
+                            When you run out, hit the button to go deeper.
+                            Reddit gives us a cursor for each query, so we
+                            paginate into older posts without re-fetching
+                            what you already saw. Each new batch is a
+                            fresh LLM call, takes 15 to 35 seconds.
+                            Already generated batches load instantly
+                            from your browser cache.
+                        </div>
+                        <div class="hiw-code" style="line-height: 1.9">
+                            ← Batch 1 | Batch 2 | Batch 3 →<br />
+                            Previous = instant, pulled from IndexedDB<br />
+                            Next = new fetch if not generated yet<br />
+                            Refresh = restores last batch from cache
                         </div>
                     </div>
                 </div>
@@ -1426,9 +1483,10 @@
                         <div class="hiw-step">The Name</div>
                         <div class="hiw-title">Why "Build or Bail"</div>
                         <div class="hiw-desc">
-                            The whole app is one call. You see a problem. You
-                            decide if it is worth your time. No maybe-later
-                            pile. That pile is where ideas go to sit forever.
+                            The whole app is one decision per idea. You see
+                            a problem. You decide if it is worth your time.
+                            No maybe-later pile. That pile is where ideas
+                            go to sit forever.
                         </div>
                         <div style="margin-top: 12px">
                             <div
@@ -1449,6 +1507,174 @@
                                 <span class="hiw-chip">FrustFeed</span>
                                 <span class="hiw-chip">IdeaDrop</span>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PLAYBOOK PAGE -->
+            <div id="page-playbook" class="page">
+                <div class="page-title">The Solo Playbook</div>
+                <div class="page-sub">
+                    Find real pain. Pick one idea. Validate it with actual
+                    conversations. Then build. No audience, no budget, no
+                    excuses.
+                </div>
+
+                <div class="hiw-group">
+                    <div class="hiw-row">
+                        <div class="hiw-step">Stage 1</div>
+                        <div class="hiw-title">Find real pain</div>
+                        <div class="hiw-desc">
+                            Time: 3 to 5 hours. Reddit is your main source.
+                            Not founder subreddits. Go where the actual
+                            sufferers hang out.
+                        </div>
+                        <div class="hiw-code" style="line-height: 1.9">
+                            "I wish there was"<br />
+                            "why is there no"<br />
+                            "anyone else hate"<br />
+                            "so frustrated with"<br />
+                            "I can't believe there's no tool"<br />
+                            "I've been manually doing"
+                        </div>
+                        <div class="hiw-desc" style="margin-top: 12px">
+                            Search Reddit-wide, not just subreddits. Let the
+                            pain find you. Also check Starter Story problem
+                            sections, Upwork gigs people pay humans for, and
+                            G2/Capterra 1-star and 2-star reviews.
+                        </div>
+                        <div class="hiw-desc" style="margin-top: 8px">
+                            Collect 20 pain statements before moving on. Not
+                            5. Not 10. 20. Exact words people use.
+                            Copy-paste them.
+                        </div>
+                    </div>
+
+                    <div class="hiw-row">
+                        <div class="hiw-step">Stage 2</div>
+                        <div class="hiw-title">Pick one idea</div>
+                        <div class="hiw-desc">
+                            Time: 1 hour. Run each pain through 5 questions.
+                            Score 1 point per yes.
+                        </div>
+                        <div class="hiw-code" style="line-height: 1.9">
+                            Do you personally understand this pain?<br />
+                            Are people already paying to solve it?<br />
+                            Can you build a basic version in under 4 weeks?<br />
+                            Is the customer easy to find online?<br />
+                            Will this still annoy people in 3 years?<br />
+                            ---<br />
+                            3+ = worth validating. 2 or less = skip it.
+                        </div>
+                        <div class="hiw-desc" style="margin-top: 12px">
+                            Do not pick the most exciting idea. Pick the one
+                            with the highest score where you also understand
+                            the customer.
+                        </div>
+                    </div>
+
+                    <div class="hiw-row">
+                        <div class="hiw-step">Stage 3</div>
+                        <div class="hiw-title">Validate before building</div>
+                        <div class="hiw-desc">
+                            Time: 5 to 10 hours. This is where most people
+                            cheat themselves. They skip this, build for 3
+                            months, then find out nobody cares.
+                        </div>
+                        <div class="hiw-desc" style="margin-top: 8px">
+                            The 2-20-200 rule from MicroConf: 2 hours of
+                            research, 20 hours of conversations and a basic
+                            landing page, 200 hours before you write serious
+                            code.
+                        </div>
+                        <div class="hiw-desc" style="margin-top: 8px">
+                            Research checklist: search Reddit for your exact
+                            problem. Search Google for existing solutions.
+                            Check Indie Hackers and Product Hunt for similar
+                            products. Count how many people you can reach to
+                            talk to.
+                        </div>
+                        <div class="hiw-desc" style="margin-top: 8px">
+                            The "sell it before you build it" test: write a
+                            3-sentence description. Post it where the
+                            sufferers are. Not "I'm building X." Ask:
+                            "I keep seeing people struggle with this. Would a
+                            tool that does [simple thing] actually be useful
+                            to you?"
+                        </div>
+                        <div class="hiw-desc" style="margin-top: 8px">
+                            Do not build anything until at least 5 real
+                            people say some version of "yes I would use
+                            that."
+                        </div>
+                    </div>
+
+                    <div class="hiw-row">
+                        <div class="hiw-step">Stage 4</div>
+                        <div class="hiw-title">Talk to real people</div>
+                        <div class="hiw-desc">
+                            Time: 3 to 5 conversations. This is the scariest
+                            part for most developers. Do it anyway.
+                        </div>
+                        <div class="hiw-desc" style="margin-top: 8px">
+                            Find people by replying to the Reddit posts
+                            where you found the pain. Find them on LinkedIn
+                            by job title. Look on Upwork for freelancers who
+                            do the manual version of your idea.
+                        </div>
+                        <div class="hiw-code" style="line-height: 1.9; margin-top: 12px">
+                            1. What is your most painful problem with [area]?<br />
+                            2. How are you solving it today?<br />
+                            3. What happens if you never solve it?<br />
+                            4. If you could wave a magic wand, how would you fix it?<br />
+                            5. Would you pay for that, and roughly how much?
+                        </div>
+                        <div class="hiw-desc" style="margin-top: 12px">
+                            Never mention your idea until question 5. Maybe
+                            not even then. You need 15 conversations minimum
+                            before you see a pattern. Pattern means 10 out of
+                            15 people describe the same pain in similar
+                            words. That is your product.
+                        </div>
+                    </div>
+
+                    <div class="hiw-row">
+                        <div class="hiw-step">Checklist</div>
+                        <div class="hiw-title">The numbers that matter</div>
+                        <div class="hiw-desc">
+                            Real thresholds. Not guesses.
+                        </div>
+                        <div class="hiw-code" style="line-height: 1.9">
+                            Pain statements collected: 20 minimum<br />
+                            Idea validation score: 3 out of 5<br />
+                            Reddit posts about the problem: 15+ in 12 months<br />
+                            "Would use it" replies: 5 minimum<br />
+                            Customer conversations: 15 minimum<br />
+                            Same pattern across conversations: 10 out of 15<br />
+                            People who said they'd pay: 3 before building<br />
+                            MVP build time: under 4 weeks
+                        </div>
+                    </div>
+
+                    <div class="hiw-row">
+                        <div class="hiw-step">Reality check</div>
+                        <div class="hiw-title">What nobody tells you</div>
+                        <div class="hiw-desc">
+                            Landing pages only work if you can drive traffic.
+                            Skip them until you have 50 people who already
+                            said they want it. Cold outreach gets 5-10%
+                            reply rates. Budget 100 messages for 10
+                            conversations. That is math, not failure.
+                        </div>
+                        <div class="hiw-desc" style="margin-top: 8px">
+                            Know who you are building for before you set a
+                            price. A US small business might pay $25-100 per
+                            month. A Pakistani customer might pay $5 or less.
+                            Build in public only works if you have followers.
+                            For zero-audience founders, document the journey
+                            on Reddit itself. Post in the same communities
+                            where you found the pain. That is your audience.
                         </div>
                     </div>
                 </div>
@@ -1488,6 +1714,18 @@
                         <div class="nl nl-short"></div>
                     </div>
                     Saved
+                </button>
+                <button
+                    id="nav-playbook"
+                    class="nav-btn"
+                    onclick="routerGo('/playbook')"
+                >
+                    <div class="nav-lines">
+                        <div class="nl nl-full"></div>
+                        <div class="nl nl-short"></div>
+                        <div class="nl nl-full"></div>
+                    </div>
+                    Playbook
                 </button>
                 <button
                     id="nav-howitworks"
@@ -1681,7 +1919,7 @@
                         ? "Signed in as " + authUserEmail
                         : "Sign in to pull ideas";
                 document.getElementById("mock-pill").style.display = "none";
-                document.getElementById("batchNav").style.display = "none";
+                document.getElementById("batchNav").classList.remove("visible");
                 try { await clearBatchData(); } catch(_) {}
                 renderFeed();
                 updateAuthUI();
@@ -1785,32 +2023,28 @@
                 const emptyBatchBtn = document.getElementById("empty-batch-btn");
 
                 if (batchState.total === 0) {
-                    nav.style.display = "none";
+                    nav.classList.remove("visible");
                     if (emptyBatchBtn) emptyBatchBtn.style.display = "none";
                     return;
                 }
 
-                nav.style.display = "flex";
+                nav.classList.add("visible");
                 label.textContent = "Batch " + batchState.current + " / " + batchState.total;
 
                 // Prev button
                 if (batchState.current <= 1) {
-                    prevBtn.style.opacity = "0.3";
-                    prevBtn.style.pointerEvents = "none";
+                    prevBtn.disabled = true;
                 } else {
-                    prevBtn.style.opacity = "1";
-                    prevBtn.style.pointerEvents = "auto";
+                    prevBtn.disabled = false;
                 }
 
                 // Next button - if next batch exists, just navigate. If not but hasMore, show generate.
                 const hasNext = batchState.current < batchState.total;
                 if (!hasNext && !batchState.hasMore) {
-                    nextBtn.style.opacity = "0.3";
-                    nextBtn.style.pointerEvents = "none";
+                    nextBtn.disabled = true;
                     if (emptyBatchBtn) emptyBatchBtn.style.display = "none";
                 } else {
-                    nextBtn.style.opacity = "1";
-                    nextBtn.style.pointerEvents = "auto";
+                    nextBtn.disabled = false;
                     if (!hasNext && batchState.hasMore && emptyBatchBtn) {
                         // Show generate button in empty state
                         emptyBatchBtn.style.display = "inline-flex";
@@ -1839,6 +2073,7 @@
                 "/": "feed",
                 "/feed": "feed",
                 "/build-list": "connected",
+                "/playbook": "playbook",
                 "/how-it-works": "howitworks",
             };
             function handleRoute() {
